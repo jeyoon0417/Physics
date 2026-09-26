@@ -1,0 +1,2470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Physics Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0f13; --panel: #15181e; --ink: #e8ebf0; --ink-dim: #8a93a0; --line: #272c35; --chip: #1c2028; --accent: #ff8a2a;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0f13; } }
+:root[data-theme="dark"] { --bg: #0d0f13; }
+*, *::before, *::after { box-sizing: inherit; }
+html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  height: 100%; margin: 0; background: var(--bg); color: var(--ink);
+  font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  display: flex; flex-direction: row; overflow: hidden; -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);
+}
+#stage { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+canvas { display: block; background: #08090d; touch-action: none; image-rendering: pixelated; }
+#hud { position: absolute; left: 8px; top: 6px; font-size: 11px; color: #7a8391; pointer-events: none; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
+#rotate { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 12px; color: var(--ink-dim); display: none; pointer-events: none; }
+#dock { width: 252px; flex: 0 0 auto; background: var(--panel); border-left: 1px solid var(--line); padding: 6px; display: flex; flex-direction: column; gap: 5px; min-height: 0; }
+#hint { font-size: 11px; line-height: 14px; min-height: 28px; max-height: 28px; overflow: hidden; color: var(--ink-dim); }
+#tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+#tabs button { border: 0; background: transparent; color: var(--ink-dim); font: inherit; font-size: 11.5px; padding: 4px 0; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+#tabs button[aria-selected="true"] { background: var(--chip); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--line); }
+#elems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; overflow-y: auto; flex: 1; min-height: 0; align-content: start; }
+.el { border: 1px solid var(--line); background: var(--chip); color: var(--ink); font: inherit; font-size: 11.5px; padding: 0 3px 0 0; height: 29px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px; overflow: hidden; white-space: nowrap; min-width: 0; }
+.el span { overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.02em; }
+.el i { width: 7px; align-self: stretch; flex: 0 0 auto; }
+.el[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); font-weight: 600; }
+#bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+#bar button { height: 26px; padding: 0; overflow: hidden; border: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: 11px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+#bar button.on { border-color: var(--accent); color: var(--accent); }
+button:focus-visible { outline: 2px solid #4a8cff; outline-offset: 2px; }
+#toast { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); background: rgba(20,24,30,.92); color: #fff; font-size: 13px; padding: 6px 12px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+#toast.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+@media (orientation: portrait) {
+  body { flex-direction: column; }
+  #dock { width: auto; border-left: 0; border-top: 1px solid var(--line); height: 50%; }
+  #rotate { display: block; }
+  #tabs { grid-template-columns: repeat(8, 1fr); }
+  #elems { grid-template-columns: repeat(4, 1fr); }
+  #bar { grid-template-columns: repeat(6, 1fr); }
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="hud"></div>
+  <div id="toast"></div>
+  <div id="rotate">Rotate to landscape for a bigger view</div>
+</div>
+<div id="dock">
+  <div id="hint"></div>
+  <div id="tabs" role="tablist"></div>
+  <div id="elems"></div>
+  <div id="bar">
+    <button id="bSize">Brush 3</button>
+    <button id="bShape">Free</button>
+    <button id="bUndo">Undo</button>
+    <button id="bView">View</button>
+    <button id="bGrav">Gravity</button>
+    <button id="bSpeed">Speed 1×</button>
+    <button id="bPause">Pause</button>
+    <button id="bStep">Step</button>
+    <button id="bDemo">Demo</button>
+    <button id="bSave">Save</button>
+    <button id="bLoad">Load</button>
+    <button id="bClear">Clear</button>
+    <button id="bMirror">Mirror</button>
+    <button id="bGasX">No Smoke</button>
+    <button id="bAirX">Reset Air</button>
+    <button id="bTempX">Reset ℃</button>
+  </div>
+</div>
+<script id="core">
+// ============ 물리 샌드박스 엔진 (DOM 없음) ============
+// 고체: 강체(자세·질량·관성, 겉면 사각 픽셀 충돌, 야코비 보정, 수면, 충격·압력 파괴)
+// 가루: 마찰 있는 알갱이 / 액체: 이중 밀도 완화 입자 유체 / 기체·불: 공기에 실려 다니는 입자
+// 공기: 격자 압력·속도장(대류 포함) / 열: 격자 온도장 + 입자 온도
+const CAT = { SOLID: 0, POWDER: 1, LIQUID: 2, GAS: 3 };
+const E = {};
+const ELEMENTS = [];
+function def(key, o) { o.key = key; o.id = ELEMENTS.length; ELEMENTS.push(o); E[key] = o.id; }
+// 공통: cat, rgb, dens, fr(마찰), str(충격 견딤), pstr(압력 견딤), cond(열전도 0~1), t0(처음 온도)
+// 상태 변화: hi = {t, to} 이상이면 바뀜, lo = {t, to} 이하이면 바뀜 / 가연성: ignite, burn / 폭발: boom, bp, bv, sens
+// 공기: kp(바람 따라가기), grav(프레임당 중력, 기체는 음수), hotair
+const UNBREAK = 1e9;
+const PW = { adv: 1, kp: 0.06 }, LQ = { adv: 1, kp: 0.03 }, GS = { adv: 1, kp: 0.4 };
+// ---- 고체 (강체) ----
+def('WALL', { name: 'Wall', cat: CAT.SOLID, rgb: [128, 128, 138], dens: 50, fr: 0.8, str: UNBREAK, pstr: UNBREAK, cond: 0.0, fixed: true, hint: 'Never moves and never breaks.' });
+def('IRON', { name: 'Iron', cat: CAT.SOLID, rgb: [150, 158, 168], dens: 7.8, fr: 0.45, str: 14, pstr: 200, cond: 0.9, hi: { t: 1538, to: 'LAVA' }, hint: 'Strong and conducts heat well. Melts at 1538℃.' });
+def('METL', { name: 'Metal', cat: CAT.SOLID, rgb: [112, 118, 140], dens: 7.0, fr: 0.45, str: 13, pstr: 180, cond: 0.95, hi: { t: 1400, to: 'LAVA' }, hint: 'Conducts heat very well. Melts at 1400℃.' });
+def('GOLD', { name: 'Gold', cat: CAT.SOLID, rgb: [220, 180, 60], dens: 19.3, fr: 0.4, str: 11, pstr: 160, cond: 0.95, hi: { t: 1064, to: 'LAVA' }, hint: 'Very heavy. Melts at 1064℃.' });
+def('WOOD', { name: 'Wood', cat: CAT.SOLID, rgb: [150, 100, 52], dens: 0.6, fr: 0.65, str: 7, pstr: 70, cond: 0.12, ignite: 280, burn: 420, hint: 'Floats on water. Burns into ash.' });
+def('COAL', { flam: 0.04, name: 'Coal', cat: CAT.SOLID, rgb: [40, 40, 44], dens: 1.4, fr: 0.7, str: 6, pstr: 60, cond: 0.2, ignite: 380, burn: 1600, hot: 900, hint: 'Burns long and hot.' });
+def('GLAS', { clear: 0.45, name: 'Glass', cat: CAT.SOLID, rgb: [170, 215, 228], dens: 2.5, fr: 0.25, str: 3.2, pstr: 18, cond: 0.35, hi: { t: 1400, to: 'LAVA' }, hint: 'Shatters from impact or pressure. Melts at 1400℃.' });
+def('STON', { name: 'Stone', cat: CAT.SOLID, rgb: [122, 118, 110], dens: 2.6, fr: 0.75, str: 4.5, pstr: 60, cond: 0.3, hi: { t: 1000, to: 'LAVA' }, hint: 'Crumbles where it cracks. Turns to lava at 1000℃.' });
+def('BRCK', { name: 'Brick', cat: CAT.SOLID, rgb: [160, 72, 56], dens: 2.0, fr: 0.8, str: 5.5, pstr: 40, cond: 0.25, hi: { t: 1500, to: 'LAVA' }, hint: 'Lighter than stone. Breaks under pressure.' });
+def('ICE', { clear: 0.35, name: 'Ice', cat: CAT.SOLID, rgb: [170, 210, 255], dens: 0.92, fr: 0.05, str: 4, pstr: 40, cond: 0.18, t0: -15, hi: { t: 2, to: 'WATR' }, hint: 'Slippery and floats. Melts above 0℃.' });
+def('DMND', { clear: 0.3, name: 'Diamond', cat: CAT.SOLID, rgb: [200, 240, 255], dens: 3.5, fr: 0.3, str: UNBREAK, pstr: UNBREAK, cond: 0.7, hint: 'Can never be broken.' });
+def('C4', { name: 'C4', cat: CAT.SOLID, rgb: [196, 104, 190], dens: 1.6, fr: 0.6, str: 9, pstr: 90, cond: 0.1, ignite: 240, boom: 2.4, bp: 24, bv: 1.2, hint: 'Explodes violently when touched by fire or heat.' });
+// ---- 가루 ----
+def('SAND', { ...PW, name: 'Sand', cat: CAT.POWDER, rgb: [222, 190, 118], dens: 2.0, fr: 0.85, cond: 0.25, hi: { t: 1700, to: 'LAVA', ct: 'GLAS' }, hint: 'Piles up. Melts into glass at 1700℃.' });
+def('DUST', { flam: 0.35, ...PW, kp: 0.15, name: 'Dust', cat: CAT.POWDER, rgb: [150, 120, 90], dens: 1.2, fr: 0.8, cond: 0.1, ignite: 350, burn: 30, hint: 'Light, drifts around and catches fire.' });
+def('GRVL', { ...PW, kp: 0.03, name: 'Gravel', cat: CAT.POWDER, rgb: [110, 108, 104], dens: 2.7, fr: 0.9, cond: 0.3, hi: { t: 1000, to: 'LAVA' }, hint: 'Heavy grains.' });
+def('SAWD', { flam: 0.3, ...PW, kp: 0.12, name: 'Sawdust', cat: CAT.POWDER, rgb: [214, 178, 128], dens: 0.4, fr: 0.8, cond: 0.1, ignite: 230, burn: 70, hint: 'Light, floats on water and burns fast.' });
+def('ASH', { ...PW, kp: 0.2, name: 'Ash', cat: CAT.POWDER, rgb: [96, 94, 92], dens: 0.35, fr: 0.7, cond: 0.1, hint: 'Very light. Blown away by wind.' });
+def('SALT', { ...PW, name: 'Salt', cat: CAT.POWDER, rgb: [235, 235, 240], dens: 2.1, fr: 0.8, cond: 0.4, dissolve: 'SLTW', hint: 'Dissolves in water into salt water.' });
+def('SNOW', { ...PW, kp: 0.15, name: 'Snow', cat: CAT.POWDER, rgb: [230, 240, 255], dens: 0.3, fr: 0.9, cond: 0.18, t0: -10, hi: { t: 2, to: 'WATR' }, hint: 'Piles up lightly and melts into water.' });
+def('GUNP', { ...PW, name: 'Gunpowder', cat: CAT.POWDER, rgb: [112, 108, 118], dens: 1.6, fr: 0.7, cond: 0.2, ignite: 190, boom: 0.55, bp: 4, bv: 0.4, hint: 'Chain-explodes when lit. Try it as a fuse trail.' });
+// ---- 액체 ----
+def('WATR', { ...LQ, name: 'Water', cat: CAT.LIQUID, rgb: [38, 110, 255], dens: 1.0, visc: 0.4, alpha: 0.72, cond: 0.11, lo: { t: -2, to: 'ICE' }, boil: 100, hint: 'Puts out fire. Boils at 100℃, freezes at 0℃.' });
+def('SLTW', { ...LQ, name: 'Salt Water', cat: CAT.LIQUID, rgb: [70, 130, 230], dens: 1.1, visc: 0.4, alpha: 0.74, cond: 0.15, lo: { t: -20, to: 'ICE' }, boil: 104, hint: 'Heavier than water and harder to freeze.' });
+def('OIL', { flam: 0.2, ...LQ, name: 'Oil', cat: CAT.LIQUID, rgb: [190, 140, 40], dens: 0.8, visc: 3, alpha: 0.86, cond: 0.16, ignite: 240, burn: 260, hint: 'Floats on water and burns fiercely.' });
+def('NITR', { ...LQ, name: 'Nitro', cat: CAT.LIQUID, rgb: [60, 220, 90], dens: 1.3, visc: 0.8, alpha: 0.82, cond: 0.12, ignite: 150, boom: 1.6, bp: 14, bv: 0.8, sens: 60, hint: 'A liquid that explodes from heat, fire or strong shockwaves.' });
+def('LAVA', { ...LQ, kp: 0.02, name: 'Lava', cat: CAT.LIQUID, rgb: [255, 90, 20], dens: 2.8, visc: 12, alpha: 0.97, cond: 0.25, t0: 1500, glow: true, hint: 'Heats everything. Cools into stone (or what it was before melting).' });
+def('ACID', { ...LQ, name: 'Acid', cat: CAT.LIQUID, rgb: [180, 240, 60], dens: 1.2, visc: 0.6, alpha: 0.8, cond: 0.13, acid: true, hint: 'Dissolves what it touches. Cannot melt glass, diamond or wall.' });
+def('LN2', { ...LQ, name: 'Liquid N2', cat: CAT.LIQUID, rgb: [200, 225, 255], dens: 0.8, visc: 0.2, alpha: 0.55, cond: 0.27, t0: -200, boil: -196, hint: '-196℃. Freezes what it touches.' });
+def('MERC', { ...LQ, kp: 0.01, name: 'Mercury', cat: CAT.LIQUID, rgb: [185, 190, 200], dens: 13.5, visc: 0.5, alpha: 0.98, cond: 0.6, hint: 'So heavy that even iron floats on it.' });
+// ---- 기체·불 ----
+def('FIRE', { ...GS, kp: 0.5, name: 'Fire', cat: CAT.GAS, rgb: [255, 140, 30], dens: 0.1, grav: -0.06, hotair: 0.004, t0: 900, hint: 'Heats its surroundings and spreads flames.' });
+def('PLSM', { ...GS, kp: 0.5, name: 'Plasma', cat: CAT.GAS, rgb: [220, 160, 255], dens: 0.1, grav: -0.03, hotair: 0.01, t0: 6000, hint: 'An extremely hot gas.' });
+def('GAS', { ...GS, kp: 0.3, name: 'Gas', cat: CAT.GAS, rgb: [200, 200, 120], dens: 0.1, grav: -0.01, ignite: 400, boom: 0.3, bp: 1.5, bv: 0.2, hint: 'Flashes and explodes when it meets fire.' });
+def('SMKE', { ...GS, kp: 0.35, name: 'Smoke', cat: CAT.GAS, rgb: [110, 110, 116], dens: 0.1, grav: -0.05, hint: 'Left over from burning.' });
+def('STEM', { ...GS, kp: 0.3, name: 'Steam', cat: CAT.GAS, rgb: [215, 225, 240], dens: 0.1, grav: -0.08, t0: 110, hint: 'Turns back into water below 100℃.' });
+def('NGAS', { ...GS, kp: 0.3, name: 'Nitrogen', cat: CAT.GAS, rgb: [190, 215, 255], dens: 0.1, grav: 0.01, t0: -190, hint: 'Cold gas from boiling liquid nitrogen.' });
+// ---- 추가 물질 ----
+def('PLST', { name: 'Plastic', cat: CAT.SOLID, rgb: [230, 230, 220], dens: 0.95, fr: 0.5, str: 8, pstr: 60, cond: 0.05, hi: { t: 160, to: 'MPLS' }, hint: 'Light. Melts and flows at 160℃.' });
+def('TUNG', { name: 'Tungsten', cat: CAT.SOLID, rgb: [95, 100, 108], dens: 19.3, fr: 0.45, str: 30, pstr: 400, cond: 0.6, hi: { t: 3422, to: 'LAVA' }, hint: 'The hardest metal to melt (3422℃).' });
+def('RUBR', { name: 'Rubber', cat: CAT.SOLID, rgb: [60, 58, 64], dens: 1.1, fr: 0.95, str: 40, pstr: 150, cond: 0.05, bounce: 0.75, ignite: 400, burn: 500, hint: 'Bouncy and hard to break.' });
+def('WAX', { name: 'Wax', cat: CAT.SOLID, rgb: [240, 225, 170], dens: 0.9, fr: 0.6, str: 5, pstr: 40, cond: 0.1, hi: { t: 60, to: 'MWAX' }, hint: 'Melts at 60℃ and hardens again when cooled.' });
+def('PLNT', { fixed: true, name: 'Plant', cat: CAT.SOLID, rgb: [40, 170, 60], dens: 0.8, fr: 0.7, str: 5, pstr: 30, cond: 0.1, ignite: 250, burn: 200, grow: true, hint: 'Grows when touching water. Burns.' });
+def('CLNE', { name: 'Clone', cat: CAT.SOLID, rgb: [230, 210, 40], dens: 50, fr: 0.8, str: UNBREAK, pstr: UNBREAK, cond: 0, fixed: true, clone: true, hint: 'Keeps producing the first thing it touches.' });
+def('VOID', { name: 'Void', cat: CAT.SOLID, rgb: [30, 10, 40], dens: 50, fr: 0.8, str: UNBREAK, pstr: UNBREAK, cond: 0, fixed: true, voidp: true, hint: 'Deletes everything it touches.' });
+def('CNCT', { ...PW, kp: 0.04, name: 'Cement', cat: CAT.POWDER, rgb: [175, 175, 170], dens: 2.4, fr: 0.9, cond: 0.25, sets: true, hint: 'Hardens into stone when touching water.' });
+def('IRNP', { ...PW, kp: 0.03, name: 'Iron Dust', cat: CAT.POWDER, rgb: [90, 94, 104], dens: 7.0, fr: 0.7, cond: 0.6, hi: { t: 1538, to: 'LAVA', ct: 'IRON' }, hint: 'Melts into iron. Rusts slowly in water.' });
+def('RUST', { ...PW, kp: 0.05, name: 'Rust', cat: CAT.POWDER, rgb: [150, 70, 40], dens: 5.2, fr: 0.8, cond: 0.2, hint: 'Iron dust that rusted in water.' });
+def('THRM', { ...PW, kp: 0.04, name: 'Thermite', cat: CAT.POWDER, rgb: [200, 120, 110], dens: 4.0, fr: 0.8, cond: 0.2, ignite: 600, burn: 90, hot: 2800, flam: 0.05, hint: 'Burns at 2800℃, hot enough to melt metal.' });
+def('SEED', { ...PW, kp: 0.05, name: 'Seed', cat: CAT.POWDER, rgb: [120, 90, 40], dens: 0.9, fr: 0.8, cond: 0.1, seed: true, ignite: 250, burn: 30, hint: 'Sprouts into a plant when touching water.' });
+def('HONY', { ...LQ, name: 'Honey', cat: CAT.LIQUID, rgb: [240, 170, 30], dens: 1.4, visc: 30, alpha: 0.9, cond: 0.1, hint: 'Flows very slowly and stickily.' });
+def('ETHL', { ...LQ, name: 'Alcohol', cat: CAT.LIQUID, rgb: [200, 220, 240], dens: 0.79, visc: 0.3, alpha: 0.45, cond: 0.12, ignite: 200, burn: 50, flam: 0.4, boil: 78, boilTo: 'GAS', hint: 'Catches fire easily. Evaporates at 78℃.' });
+def('MWAX', { ...LQ, name: 'Molten Wax', cat: CAT.LIQUID, rgb: [250, 230, 150], dens: 0.9, visc: 8, alpha: 0.9, cond: 0.1, t0: 90, lo: { t: 55, to: 'WAX' }, hint: 'Hardens into wax when cooled.' });
+def('MPLS', { ...LQ, name: 'Molten Plastic', cat: CAT.LIQUID, rgb: [235, 235, 210], dens: 0.95, visc: 20, alpha: 0.95, cond: 0.05, t0: 200, lo: { t: 150, to: 'PLST' }, ignite: 350, burn: 200, hint: 'Hardens into plastic when cooled.' });
+def('SLIM', { ...LQ, name: 'Slime', cat: CAT.LIQUID, rgb: [120, 230, 110], dens: 1.1, visc: 60, alpha: 0.85, cond: 0.1, hint: 'Soft, clumpy and slow-flowing.' });
+def('HYGN', { ...GS, kp: 0.35, name: 'Hydrogen', cat: CAT.GAS, rgb: [180, 200, 255], dens: 0.05, grav: -0.05, ignite: 500, boom: 0.5, bp: 3, bv: 0.4, flam: 0.9, hint: 'The lightest gas. Explodes in fire and turns to steam.' });
+def('OXYG', { ...GS, kp: 0.3, name: 'Oxygen', cat: CAT.GAS, rgb: [170, 220, 255], dens: 0.12, grav: 0.0, oxy: true, hint: 'Makes fire bigger and hotter.' });
+def('CO2', { ...GS, kp: 0.25, name: 'CO2', cat: CAT.GAS, rgb: [140, 140, 150], dens: 0.2, grav: 0.03, quench: true, hint: 'Heavier than air. Sinks and smothers fire.' });
+
+// 녹는 물질 → 용암이 식을 때 굳는 온도
+// ---- 추가 물질 ----
+def('OBSD', { name: 'Obsidian', cat: CAT.SOLID, rgb: [38, 30, 50], dens: 2.4, fr: 0.5, str: 6, pstr: 90, cond: 0.2, gloss: true, hi: { t: 1100, to: 'LAVA' }, hint: 'Black glass formed when lava is quenched by water.' });
+def('FUSE', { fixed: true, name: 'Fuse', cat: CAT.SOLID, rgb: [196, 156, 84], dens: 1, fr: 0.7, str: UNBREAK, pstr: 30, cond: 0.04, ignite: 200, burn: 16, flam: 1, hint: 'Burns slowly along its length and sets off explosives.' });
+def('DIRT', { ...PW, name: 'Dirt', cat: CAT.POWDER, rgb: [112, 82, 52], dens: 1.5, fr: 0.9, cond: 0.12, hint: 'Turns to mud with water. Seeds grow well in it.' });
+def('MUD', { ...LQ, kp: 0.02, name: 'Mud', cat: CAT.LIQUID, rgb: [96, 70, 46], dens: 1.7, visc: 25, alpha: 0.97, cond: 0.15, hi: { t: 100, to: 'DIRT' }, hint: 'Sticky and slow. Dries into dirt at 100℃.' });
+def('NAPM', { ...LQ, name: 'Napalm', cat: CAT.LIQUID, rgb: [235, 120, 40], dens: 0.9, visc: 14, alpha: 0.92, cond: 0.12, ignite: 180, burn: 900, hot: 1300, flam: 0.8, hint: 'Sticky, burns very long and very hot.' });
+def('GLOW', { ...LQ, name: 'Glow Liquid', cat: CAT.LIQUID, rgb: [110, 255, 140], dens: 1.3, visc: 0.8, alpha: 0.8, cond: 0.1, glowLiq: true, hint: 'Glows softly in the dark.' });
+def('FWRK', { ...PW, name: 'Firework', cat: CAT.POWDER, rgb: [236, 80, 140], dens: 1.2, fr: 0.7, cond: 0.2, ignite: 150, firework: true, hint: 'When lit, shoots up and bursts into colors.' });
+def('EMBR', { ...GS, kp: 0.08, hidden: true, name: 'Ember', cat: CAT.GAS, rgb: [255, 200, 80], dens: 0.2, grav: 0.025, t0: 1000, hint: 'A sparkling ember.' });
+def('COPR', { name: 'Copper', cat: CAT.SOLID, rgb: [196, 112, 74], dens: 8.9, fr: 0.45, str: 12, pstr: 170, cond: 1.0, hi: { t: 1085, to: 'LAVA' }, hint: 'Conducts heat the fastest. Melts at 1085℃.' });
+def('SPNG', { name: 'Sponge', cat: CAT.SOLID, rgb: [232, 208, 90], dens: 0.3, fr: 0.9, str: 9, pstr: 50, cond: 0.05, sponge: true, ignite: 300, burn: 120, hint: 'Soaks up water and releases steam when hot.' });
+def('NA', { ...PW, kp: 0.05, name: 'Sodium', cat: CAT.POWDER, rgb: [206, 206, 196], dens: 0.97, fr: 0.7, cond: 0.5, natr: true, hint: 'Releases hydrogen and sparks in water.' });
+def('URAN', { ...PW, kp: 0.02, name: 'Uranium', cat: CAT.POWDER, rgb: [70, 150, 60], dens: 19, fr: 0.85, cond: 0.3, selfHeat: 0.5, hi: { t: 1132, to: 'LAVA' }, hint: 'Heats itself up. A big pile will melt.' });
+def('GASO', { ...LQ, name: 'Gasoline', cat: CAT.LIQUID, rgb: [236, 214, 120], dens: 0.72, visc: 0.25, alpha: 0.5, cond: 0.12, ignite: 150, burn: 40, flam: 0.9, boil: 95, boilTo: 'GAS', hint: 'Very flammable. Evaporates into gas when hot.' });
+def('SMKB', { ...PW, name: 'Smoke Bomb', cat: CAT.POWDER, rgb: [120, 150, 110], dens: 1.3, fr: 0.8, cond: 0.15, ignite: 200, burn: 260, hot: 260, flam: 0.3, smoky: true, hint: 'When lit, pours out lots of smoke.' });
+def('HTPL', { name: 'Heat Plate', cat: CAT.SOLID, rgb: [150, 70, 60], dens: 50, fr: 0.8, str: UNBREAK, pstr: UNBREAK, cond: 1, fixed: true, thermo: 900, hint: 'Always 900℃. Heats what it touches.' });
+def('CLPL', { name: 'Cold Plate', cat: CAT.SOLID, rgb: [70, 120, 200], dens: 50, fr: 0.8, str: UNBREAK, pstr: UNBREAK, cond: 1, fixed: true, thermo: -150, t0: -150, hint: 'Always -150℃. Freezes what it touches.' });
+for (const k of ['IRON', 'METL', 'GOLD', 'TUNG', 'MERC', 'COPR']) ELEMENTS[E[k]].metal = true;
+for (const D of ELEMENTS) if (D.hi && D.hi.to === 'LAVA') D.melt = D.hi.t;
+
+const AMB = 22; // 주변 온도 °C
+
+function createWorld(W, H, CAP) {
+	CAP = CAP || 9000;
+	// ---------------- 입자 ----------------
+	const x = new Float32Array(CAP), y = new Float32Array(CAP), vx = new Float32Array(CAP), vy = new Float32Array(CAP);
+	const ox = new Float32Array(CAP), oy = new Float32Array(CAP);
+	const el = new Uint8Array(CAP), cat = new Uint8Array(CAP), shade = new Uint8Array(CAP);
+	const temp = new Float32Array(CAP), life = new Float32Array(CAP), burning = new Float32Array(CAP);
+	const body = new Int32Array(CAP).fill(-1), bidx = new Int32Array(CAP), gx = new Int16Array(CAP), gy = new Int16Array(CAP);
+	const boundary = new Uint8Array(CAP), anch = new Uint8Array(CAP), dead = new Uint8Array(CAP), fuse = new Int8Array(CAP);
+	const corr = new Float32Array(CAP);
+	const ctype = new Uint8Array(CAP), fresh = new Uint8Array(CAP), freshAt = new Int32Array(CAP);
+	const zz = new Uint8Array(CAP), calm = new Uint8Array(CAP); // 가루·액체 휴식 상태
+	const rx0 = new Float32Array(CAP), ry0 = new Float32Array(CAP); // 휴식 판정용 기준 위치
+	const pDens = new Float32Array(CAP), pFr = new Float32Array(CAP);
+	let n = 0;
+	const FREE = -1;
+	const bodies = [];
+	let needCompact = false;
+	const events = []; // 폭발 섬광 등 (렌더러용)
+
+	// ---------------- 공기 / 열 격자 ----------------
+	const AC = 4, AW = Math.ceil(W / AC), AH = Math.ceil(H / AC), AN = AW * AH;
+	const pv = new Float32Array(AN), avx = new Float32Array(AN), avy = new Float32Array(AN);
+	const pv2 = new Float32Array(AN), avx2 = new Float32Array(AN), avy2 = new Float32Array(AN);
+	const hv = new Float32Array(AN).fill(AMB), hv2 = new Float32Array(AN);
+	const acnt = new Float32Array(AN), asvx = new Float32Array(AN), asvy = new Float32Array(AN);
+	const block = new Uint8Array(AN), bvx = new Float32Array(AN), bvy = new Float32Array(AN), bcnt = new Uint16Array(AN), lcnt = new Uint16Array(AN);
+
+	// ---------------- 공간 해시 ----------------
+	const HC = 2, HW = Math.ceil(W / HC) + 2, HH = Math.ceil(H / HC) + 2;
+	const cStart = new Int32Array(HW * HH + 1), cCount = new Int32Array(HW * HH);
+	const sorted = new Int32Array(CAP), hashList = new Int32Array(CAP);
+	let hashN = 0;
+	const occ = new Int32Array(W * H); // 반응용 점유 격자 (index+1)
+	const gocc = new Int32Array(W * H); // 기체 점유 격자
+
+	// ---------------- 설정 ----------------
+	const R = 0.49, MAXD = 0.8, VMAX = 7;
+	let gravity = 1; // 중력 배율 (0이면 무중력)
+	let ITERS = 8;
+	const H_F = 2.0, RHO0 = 1.5, KP = 0.35, KN = 0.35;
+	const PF = 0.22; // 압력 → 힘
+
+	function rnd() { return Math.random(); }
+	function aIdx(px, py) {
+		let cx = (px / AC) | 0, cy = (py / AC) | 0;
+		if (cx < 0) cx = 0; else if (cx >= AW) cx = AW - 1;
+		if (cy < 0) cy = 0; else if (cy >= AH) cy = AH - 1;
+		return cy * AW + cx;
+	}
+	// 공기 속도·압력 기울기 (쌍선형)
+	function airAt(px, py, out) {
+		let fx = px / AC - 0.5, fy = py / AC - 0.5;
+		if (fx < 0) fx = 0; if (fy < 0) fy = 0; if (fx > AW - 1.001) fx = AW - 1.001; if (fy > AH - 1.001) fy = AH - 1.001;
+		const ix = fx | 0, iy = fy | 0, tx = fx - ix, ty = fy - iy;
+		const i00 = iy * AW + ix, i10 = i00 + 1, i01 = i00 + AW, i11 = i01 + 1;
+		const w00 = (1 - tx) * (1 - ty), w10 = tx * (1 - ty), w01 = (1 - tx) * ty, w11 = tx * ty;
+		out.vx = avx[i00] * w00 + avx[i10] * w10 + avx[i01] * w01 + avx[i11] * w11;
+		out.vy = avy[i00] * w00 + avy[i10] * w10 + avy[i01] * w01 + avy[i11] * w11;
+		out.gx = ((pv[i10] - pv[i00]) * (1 - ty) + (pv[i11] - pv[i01]) * ty) / AC;
+		out.gy = ((pv[i01] - pv[i00]) * (1 - tx) + (pv[i11] - pv[i10]) * tx) / AC;
+		out.p = pv[i00] * w00 + pv[i10] * w10 + pv[i01] * w01 + pv[i11] * w11;
+	}
+	const AIR = { vx: 0, vy: 0, gx: 0, gy: 0, p: 0 };
+
+	// ---------------- 입자 관리 ----------------
+	function gasLife(e) {
+		if (e === E.FIRE) return 25 + rnd() * 30;
+		if (e === E.PLSM) return 18 + rnd() * 22;
+		if (e === E.SMKE) return 140 + rnd() * 120;
+		if (e === E.STEM) return 400 + rnd() * 300;
+		if (e === E.NGAS) return 250 + rnd() * 250;
+		if (e === E.EMBR) return 30 + rnd() * 40;
+		return 1e9; // 가스는 사라지지 않음
+	}
+	function add(px, py, e, t) {
+		if (n >= CAP) return -1;
+		const i = n++;
+		const D = ELEMENTS[e];
+		x[i] = ox[i] = px; y[i] = oy[i] = py; vx[i] = vy[i] = 0;
+		el[i] = e; cat[i] = D.cat; shade[i] = (rnd() * 4) | 0;
+		temp[i] = t === undefined ? (D.t0 !== undefined ? D.t0 : AMB) : t;
+		life[i] = D.cat === CAT.GAS ? gasLife(e) : 0; burning[i] = 0; fuse[i] = 0;
+		body[i] = FREE; boundary[i] = 1; anch[i] = 0; dead[i] = 0; corr[i] = 0; ctype[i] = e === E.LAVA ? E.STON : 0; fresh[i] = 0; zz[i] = 0; calm[i] = 0;
+		pDens[i] = D.dens; pFr[i] = D.fr || 0.02;
+		gx[i] = Math.round(px); gy[i] = Math.round(py);
+		return i;
+	}
+	// 물질이 바뀜 (녹음·얼음·끓음·연소 등). 강체에 속해 있으면 떨어져 나옴
+	function changeType(i, e, ct) {
+		const D = ELEMENTS[e];
+		if (body[i] >= 0) { dirty.add(body[i]); detachNow.push(i); }
+		el[i] = e; cat[i] = D.cat; pDens[i] = D.dens; pFr[i] = D.fr || 0.02; burning[i] = 0; fuse[i] = 0; zz[i] = 0; calm[i] = 0;
+		if (ct !== undefined) ctype[i] = ct;
+		life[i] = D.cat === CAT.GAS ? gasLife(e) : 0;
+		if (D.cat === CAT.SOLID) { fresh[i] = 1; freshAt[i] = frame; } else fresh[i] = 0;
+	}
+	function kill(i) {
+		if (dead[i]) return;
+		dead[i] = 1; needCompact = true; if (cat[i] !== CAT.GAS) wakeSpots.push(x[i], y[i]); // 기체가 사라지는 건 받침과 무관
+		if (body[i] >= 0) dirty.add(body[i]);
+	}
+	const dirty = new Set();
+	const wakeSpots = [];
+
+	// ---------------- 강체 ----------------
+	function lkey(a, b) { return a * 4096 + b; }
+	function setAngle(B, a) { B.th = a; B.co = Math.cos(a); B.si = Math.sin(a); }
+	function pos(i, out) {
+		const b = body[i];
+		if (b >= 0) {
+			const B = bodies[b], k = bidx[i];
+			out[0] = B.cx + B.co * B.qx[k] - B.si * B.qy[k];
+			out[1] = B.cy + B.si * B.qx[k] + B.co * B.qy[k];
+		} else { out[0] = x[i]; out[1] = y[i]; }
+	}
+	const P0 = [0, 0], P1 = [0, 0];
+
+	function makeBody(mem, anchored, pvxs, pvys, theta) {
+		if (mem.length === 1) {
+			const i = mem[0];
+			body[i] = FREE; boundary[i] = 1; vx[i] = pvxs[0]; vy[i] = pvys[0];
+			if (anchored) anch[i] = 1;
+			return -1;
+		}
+		let M = 0, cx = 0, cy = 0, gcx = 0, gcy = 0, mvx = 0, mvy = 0;
+		for (let k = 0; k < mem.length; k++) {
+			const i = mem[k], m = pDens[i];
+			M += m; cx += x[i] * m; cy += y[i] * m; gcx += gx[i] * m; gcy += gy[i] * m; mvx += pvxs[k] * m; mvy += pvys[k] * m;
+		}
+		cx /= M; cy /= M; gcx /= M; gcy /= M;
+		const B = {
+			m: mem.slice(), qx: new Float32Array(mem.length), qy: new Float32Array(mem.length), occ: new Map(),
+			cx, cy, gcx, gcy, th: 0, co: 1, si: 0, vx: 0, vy: 0, w: 0, pcx: cx, pcy: cy, pth: 0, pvx: 0, pvy: 0, pw: 0,
+			M, I: 1, rmax: 1, stat: !!anchored, alive: true, asleep: false, still: 0, cool: 6, impact: 0, recent: 0,
+			adx: 0, ady: 0, adth: 0, an: 0, fax: 0, fay: 0, tq: 0, pbreak: -1, pbv: 0, wet: 0
+		};
+		setAngle(B, theta || 0); B.pth = B.th;
+		let I = 0, L = 0, rmax = 0;
+		for (let k = 0; k < mem.length; k++) {
+			const i = mem[k], m = pDens[i];
+			const rx = gx[i] - gcx, ry = gy[i] - gcy;
+			B.qx[k] = rx; B.qy[k] = ry; B.occ.set(lkey(gx[i], gy[i]), k);
+			I += m * (rx * rx + ry * ry + 1 / 6);
+			const wx = x[i] - cx, wy = y[i] - cy;
+			L += m * (wx * (pvys[k] - mvy / M) - wy * (pvxs[k] - mvx / M));
+			rmax = Math.max(rmax, Math.hypot(rx, ry));
+		}
+		B.I = Math.max(I, 1e-3); B.rmax = rmax + 0.5;
+		B.bounce = 0; for (const i of mem) B.bounce = Math.max(B.bounce, ELEMENTS[el[i]].bounce || 0);
+		if (!anchored) { B.vx = mvx / M; B.vy = mvy / M; B.w = L / B.I; }
+		let id = bodies.findIndex(b => !b.alive);
+		if (id < 0) { id = bodies.length; bodies.push(B); } else bodies[id] = B;
+		for (let k = 0; k < mem.length; k++) {
+			const i = mem[k];
+			body[i] = id; bidx[i] = k;
+			boundary[i] = (B.occ.has(lkey(gx[i] + 1, gy[i])) && B.occ.has(lkey(gx[i] - 1, gy[i])) && B.occ.has(lkey(gx[i], gy[i] + 1)) && B.occ.has(lkey(gx[i], gy[i] - 1))) ? 0 : 1;
+		}
+		return id;
+	}
+
+	function components(mem, key) {
+		const map = new Map(), kidx = new Map();
+		mem.forEach((i, k) => { map.set(lkey(gx[i], gy[i]), i); kidx.set(i, k); });
+		const seen = new Set(), out = [];
+		for (const s0 of mem) {
+			if (seen.has(s0)) continue;
+			const comp = [], st = [s0]; seen.add(s0);
+			while (st.length) {
+				const a = st.pop(); comp.push(a);
+				const k = lkey(gx[a], gy[a]);
+				for (const d of [4096, -4096, 1, -1]) {
+					const b = map.get(k + d);
+					if (b === undefined || seen.has(b)) continue;
+					if (key && key[kidx.get(a)] !== key[kidx.get(b)]) continue;
+					seen.add(b); st.push(b);
+				}
+			}
+			out.push(comp);
+		}
+		return out;
+	}
+
+	// 바디 분할: key(구성원별)로 조각 나눔, detach(구성원별)는 떨어져 나가는 입자
+	function split(b, key, detach, crackKind) {
+		const B = bodies[b];
+		if (!B || !B.alive) return;
+		const stat = B.stat, theta = B.th;
+		const keep = [], keepKey = [], vel = new Map();
+		for (let k = 0; k < B.m.length; k++) {
+			const i = B.m[k];
+			if (dead[i] || body[i] !== b) continue;
+			pos(i, P0); x[i] = P0[0]; y[i] = P0[1];
+			const pvx = stat ? 0 : B.vx - B.w * (P0[1] - B.cy), pvy = stat ? 0 : B.vy + B.w * (P0[0] - B.cx);
+			vel.set(i, [pvx, pvy]);
+			if (detach && detach[k]) {
+				body[i] = FREE; boundary[i] = 1; vx[i] = pvx; vy[i] = pvy;
+				if (crackKind === 'STON') { el[i] = E.SAND; cat[i] = CAT.POWDER; pDens[i] = 2; pFr[i] = 0.85; }
+				continue;
+			}
+			keep.push(i); keepKey.push(key ? key[k] : 0);
+		}
+		B.alive = false;
+		for (const c of components(keep, key ? keepKey : null)) {
+			const cvx = c.map(i => vel.get(i)[0]), cvy = c.map(i => vel.get(i)[1]);
+			if (key && c.length <= 2) {
+				for (let k = 0; k < c.length; k++) { const i = c[k]; body[i] = FREE; boundary[i] = 1; vx[i] = cvx[k]; vy[i] = cvy[k]; }
+				continue;
+			}
+			// 고정된 바디가 쪼개지면 고정점이 있는 조각만 고정
+			const anchoredPiece = stat && c.some(i => anch[i]);
+			const nb = makeBody(c, anchoredPiece, cvx, cvy, theta);
+			if (nb >= 0 && key) bodies[nb].cool = crackKind === 'GLAS' ? 2 : 8;
+		}
+	}
+
+	function crack(b, i0, ratio) {
+		const B = bodies[b];
+		const L = B.m.length;
+		if (L < 4) return;
+		const kd = ELEMENTS[el[i0]].key;
+		let mx = 0, my = 0;
+		for (const i of B.m) { mx += gx[i]; my += gy[i]; }
+		mx /= L; my /= L;
+		let px = gx[i0], py = gy[i0];
+		const toC = Math.atan2(my - py, mx - px);
+		const dirs = [];
+		if (kd === 'GLAS') {
+			const nl = Math.max(1, Math.min(5, Math.ceil(ratio)));
+			for (let t = 0; t < nl; t++) dirs.push(toC + t * Math.PI / nl + (rnd() - 0.5) * 0.4);
+		} else if (kd === 'WOOD') {
+			let sxx = 0, syy = 0, sxy = 0;
+			for (const i of B.m) { const dx = gx[i] - mx, dy = gy[i] - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+			const g = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+			px = (px + mx) / 2 + 0.5; py = (py + my) / 2 + 0.5;
+			dirs.push(g + (rnd() - 0.5) * 0.2);
+			if (ratio > 5) dirs.push(g + Math.PI / 2 + (rnd() - 0.5) * 0.3);
+		} else {
+			dirs.push(toC + (rnd() - 0.5) * 0.8);
+			if (ratio > 3) dirs.push(toC + Math.PI / 2 + (rnd() - 0.5) * 0.8);
+		}
+		const key = new Array(L), dust = new Array(L);
+		for (let k = 0; k < L; k++) {
+			const i = B.m[k]; let kk = 0; dust[k] = 0;
+			for (let t = 0; t < dirs.length; t++) {
+				const c = Math.cos(dirs[t]), s = Math.sin(dirs[t]);
+				const cr = (gx[i] - px) * s - (gy[i] - py) * c;
+				if (cr > 0) kk |= 1 << t;
+				if (kd === 'STON' && Math.abs(cr) < 0.6 && rnd() < 0.6) dust[k] = 1;
+			}
+			key[k] = kk;
+		}
+		split(b, key, dust, kd);
+	}
+
+	function movable(i) {
+		const b = body[i];
+		if (b >= 0) { const B = bodies[b]; return !B.stat && !B.asleep; }
+		return !anch[i] && !zz[i];
+	}
+	function invMass(i, px, py, nx, ny) {
+		const b = body[i];
+		if (b >= 0) {
+			const B = bodies[b];
+			if (B.stat || B.asleep) return 0;
+			const rn = (px - B.cx) * ny - (py - B.cy) * nx;
+			return 1 / B.M + rn * rn / B.I;
+		}
+		return anch[i] || zz[i] ? 0 : 1 / pDens[i];
+	}
+	function bodyInvMass(B, px, py, nx, ny) {
+		if (B.stat || B.asleep) return 0;
+		const rn = (px - B.cx) * ny - (py - B.cy) * nx;
+		return 1 / B.M + rn * rn / B.I;
+	}
+	// (jx, jy) = 위치 충격량. 바디는 모아서 평균 적용 (방문 순서 편향 없음), 알갱이는 즉시 적용
+	function apply(i, px, py, jx, jy) {
+		const b = body[i];
+		if (b >= 0) { bodyApply(bodies[b], px, py, jx, jy); }
+		else if (!anch[i] && !zz[i]) { x[i] += jx / pDens[i]; y[i] += jy / pDens[i]; }
+	}
+	function bodyApply(B, px, py, dx, dy) {
+		if (B.stat || B.asleep) return;
+		B.adx += dx / B.M; B.ady += dy / B.M; B.adth += ((px - B.cx) * dy - (py - B.cy) * dx) / B.I; B.an++;
+	}
+	// 유체 압력처럼 "힘"으로 작용하는 보정은 합산해서 바로 적용
+	function bodyPush(B, px, py, dx, dy) {
+		if (B.stat) return;
+		if (B.asleep) { if (dx * dx + dy * dy > 1e-4) wake(B); else return; }
+		B.cx += dx / B.M; B.cy += dy / B.M; setAngle(B, B.th + ((px - B.cx) * dy - (py - B.cy) * dx) / B.I);
+	}
+	function commit(dynB) {
+		for (const B of dynB) {
+			if (!B.an) continue;
+			const k = 1 / B.an;
+			B.cx += B.adx * k; B.cy += B.ady * k; setAngle(B, B.th + B.adth * k);
+			B.adx = B.ady = B.adth = 0; B.an = 0;
+		}
+	}
+	function wake(B) { if (B.asleep) { B.asleep = false; B.still = 0; } }
+
+	// ---------------- 해시 ----------------
+	function buildHash() {
+		cCount.fill(0);
+		for (let k = 0; k < hashN; k++) {
+			const i = hashList[k];
+			let cx = (x[i] / HC) | 0, cy = (y[i] / HC) | 0;
+			if (cx < 0) cx = 0; else if (cx >= HW) cx = HW - 1;
+			if (cy < 0) cy = 0; else if (cy >= HH) cy = HH - 1;
+			cCount[cy * HW + cx]++;
+		}
+		let s = 0;
+		for (let c = 0; c < HW * HH; c++) { cStart[c] = s; s += cCount[c]; }
+		cStart[HW * HH] = s;
+		cCount.fill(0);
+		for (let k = 0; k < hashN; k++) {
+			const i = hashList[k];
+			let cx = (x[i] / HC) | 0, cy = (y[i] / HC) | 0;
+			if (cx < 0) cx = 0; else if (cx >= HW) cx = HW - 1;
+			if (cy < 0) cy = 0; else if (cy >= HH) cy = HH - 1;
+			const c = cy * HW + cx; sorted[cStart[c] + cCount[c]++] = i;
+		}
+	}
+
+	// ---------------- 충돌 ----------------
+	function blocked(cx, cy) { return cx < 0 || cy < 0 || cx >= W || cy >= H; }
+
+	function collideWithBody(i, b) {
+		const B = bodies[b];
+		pos(i, P0); const px = P0[0], py = P0[1];
+		const dxw = px - B.cx, dyw = py - B.cy;
+		const lx = B.co * dxw + B.si * dyw + B.gcx, ly = -B.si * dxw + B.co * dyw + B.gcy;
+		const cx = Math.floor(lx + 0.5), cy = Math.floor(ly + 0.5);
+		const liq = cat[i] === CAT.LIQUID || cat[i] === CAT.GAS;
+		const Ri = liq ? 0.45 : R;
+		for (let yy = cy - 1; yy <= cy + 1; yy++)
+			for (let xx = cx - 1; xx <= cx + 1; xx++) {
+				const kk = B.occ.get(lkey(xx, yy));
+				if (kk === undefined) continue;
+				const qx = Math.min(Math.max(lx, xx - 0.5), xx + 0.5), qy = Math.min(Math.max(ly, yy - 0.5), yy + 0.5);
+				const dx = lx - qx, dy = ly - qy, d2 = dx * dx + dy * dy;
+				let nlx, nly, pen;
+				if (d2 < 1e-12) {
+					const odx = ox[i] - B.cx, ody = oy[i] - B.cy;
+					const l0x = B.co * odx + B.si * ody + B.gcx, l0y = -B.si * odx + B.co * ody + B.gcy;
+					let best = 1e9, bestDist = 0; nlx = 0; nly = -1;
+					for (const d of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+						if (B.occ.has(lkey(xx + d[0], yy + d[1]))) continue;
+						const dist = d[0] ? (d[0] > 0 ? xx + 0.5 - lx : lx - (xx - 0.5)) : (d[1] > 0 ? yy + 0.5 - ly : ly - (yy - 0.5));
+						const ex = d[0] ? xx + d[0] * (0.5 + Ri) : lx, ey = d[1] ? yy + d[1] * (0.5 + Ri) : ly;
+						const score = (ex - l0x) * (ex - l0x) + (ey - l0y) * (ey - l0y);
+						if (score < best) { best = score; bestDist = dist; nlx = d[0]; nly = d[1]; }
+					}
+					if (best >= 1e9) continue;
+					pen = bestDist + Ri;
+				} else {
+					if (d2 >= Ri * Ri) continue;
+					if (qx !== lx && qy !== ly) {
+						const sx = lx > qx ? 1 : -1, sy = ly > qy ? 1 : -1;
+						if (B.occ.has(lkey(xx + sx, yy)) || B.occ.has(lkey(xx, yy + sy))) continue;
+					}
+					const d = Math.sqrt(d2); nlx = dx / d; nly = dy / d; pen = Ri - d;
+				}
+				const nx = B.co * nlx - B.si * nly, ny = B.si * nlx + B.co * nly;
+				const qwx = B.cx + B.co * (qx - B.gcx) - B.si * (qy - B.gcy);
+				const qwy = B.cy + B.si * (qx - B.gcx) + B.co * (qy - B.gcy);
+				const wi = invMass(i, px, py, nx, ny), wb = bodyInvMass(B, qwx, qwy, nx, ny);
+				if (B.asleep && pen > 0.08 && movable(i)) wakeNext.push(B);
+				if (wi + wb <= 0) continue;
+				if (liq) { if (wi > 0) apply(i, px, py, nx * pen / wi, ny * pen / wi); continue; } // 액체·기체는 비켜나기만, 바디는 유체 압력으로 힘을 받음
+				const lam = pen / (wi + wb);
+				apply(i, px, py, nx * lam, ny * lam);
+				bodyApply(B, qwx, qwy, -nx * lam, -ny * lam);
+				corr[i] = Math.max(corr[i], pen); const bj = B.m[kk]; corr[bj] = Math.max(corr[bj], pen);
+				// 마찰
+				if (liq) continue;
+				const c0 = Math.cos(B.pth), s0 = Math.sin(B.pth), lqx = qx - B.gcx, lqy = qy - B.gcy;
+				const oqx = B.pcx + c0 * lqx - s0 * lqy, oqy = B.pcy + s0 * lqx + c0 * lqy;
+				const rxv = (px - ox[i]) - (qwx - oqx), ryv = (py - oy[i]) - (qwy - oqy);
+				const rn = rxv * nx + ryv * ny;
+				let tx = rxv - rn * nx, ty = ryv - rn * ny; const tl = Math.hypot(tx, ty);
+				if (tl < 1e-7) continue;
+				tx /= tl; ty /= tl;
+				const wti = invMass(i, px, py, tx, ty), wtb = bodyInvMass(B, qwx, qwy, tx, ty);
+				if (wti + wtb <= 0) continue;
+				const mu = Math.sqrt(pFr[i] * pFr[bj]);
+				let lt = tl / (wti + wtb);
+				if (tl > mu * pen * 1.5) lt = Math.min(lt, mu * lam);
+				apply(i, px, py, -tx * lt, -ty * lt);
+				bodyApply(B, qwx, qwy, tx * lt, ty * lt);
+			}
+	}
+
+	const nearBodies = [];
+	const nearFlag = new Uint8Array(CAP);
+	function contacts(full) {
+		const D = 2 * R;
+		for (let k = 0; k < hashN; k++) {
+			const i = hashList[k];
+			if (!movable(i)) continue;
+			if (body[i] >= 0 && !boundary[i]) continue; // 강체 속살은 충돌 검사 불필요 (겉면만)
+			const ci = cat[i];
+			// 반복 3회차부터는 움직이는 바디와 그 주변 알갱이만 (액체·기체는 압력으로 충분)
+			if (!full && body[i] < 0 && (!nearFlag[i] || ci === CAT.LIQUID || ci === CAT.GAS)) continue;
+			if (ci === CAT.LIQUID && !solidNb[i]) continue; // 물 한가운데 입자는 충돌 검사 불필요
+			const cx = Math.min(Math.max((x[i] / HC) | 0, 0), HW - 1), cy = Math.min(Math.max((y[i] / HC) | 0, 0), HH - 1);
+			nearBodies.length = 0;
+			for (let yy = cy - 1; yy <= cy + 1; yy++) {
+				if (yy < 0 || yy >= HH) continue;
+				for (let xx = cx - 1; xx <= cx + 1; xx++) {
+					if (xx < 0 || xx >= HW) continue;
+					const c = yy * HW + xx;
+					for (let s = cStart[c], e = cStart[c] + cCount[c]; s < e; s++) {
+						const j = sorted[s];
+						if (j === i) continue;
+						const bj = body[j];
+						if (bj >= 0) {
+							if (bj === body[i]) continue;
+							if (nearBodies.indexOf(bj) < 0) nearBodies.push(bj);
+							continue;
+						}
+						if (body[i] >= 0) { if (zz[j] && cat[j] !== CAT.GAS) { const ddx = x[i] - x[j], ddy = y[i] - y[j]; if (ddx * ddx + ddy * ddy < 1.3) { zz[j] = 0; calm[j] = 0; } } continue; }
+						if (ci === CAT.GAS) continue; // 기체는 원끼리 충돌 없음
+						const cj = cat[j];
+						if (cj === CAT.GAS) continue;
+						if (ci === CAT.LIQUID && cj === CAT.LIQUID) continue; // 액체끼리는 유체 압력으로
+						if (movable(j) && j < i) continue;
+						const liq = ci === CAT.LIQUID || cj === CAT.LIQUID;
+						const RR = liq ? 0.8 : D;
+						let dx = x[i] - x[j], dy = y[i] - y[j];
+						const d2 = dx * dx + dy * dy;
+						if (d2 >= RR * RR) continue;
+						let d = Math.sqrt(d2);
+						if (d < 1e-6) { dx = rnd() - 0.5; dy = -1; d = Math.hypot(dx, dy); }
+						const nx = dx / d, ny = dy / d, pen = RR - d;
+						if (zz[j] && pen > 0.12) { zz[j] = 0; calm[j] = 0; }
+						const wi = anch[i] || zz[i] ? 0 : 1 / pDens[i], wj = anch[j] || zz[j] ? 0 : 1 / pDens[j];
+						if (wi + wj <= 0) continue;
+						const lam = pen / (wi + wj);
+						x[i] += nx * lam * wi; y[i] += ny * lam * wi;
+						x[j] -= nx * lam * wj; y[j] -= ny * lam * wj;
+						// 위치 기반 마찰 (가루 더미 안식각)
+						const mu = liq ? 0.02 : Math.sqrt(pFr[i] * pFr[j]);
+						const rxv = (x[i] - ox[i]) - (x[j] - ox[j]), ryv = (y[i] - oy[i]) - (y[j] - oy[j]);
+						const rn = rxv * nx + ryv * ny;
+						const tx = rxv - rn * nx, ty = ryv - rn * ny, tl = Math.hypot(tx, ty);
+						if (tl > 1e-7) {
+							const kf = tl < mu * pen * 1.5 ? 1 : Math.min(1, mu * pen / tl);
+							const ws = wi + wj;
+							x[i] -= tx * kf * wi / ws; y[i] -= ty * kf * wi / ws;
+							x[j] += tx * kf * wj / ws; y[j] += ty * kf * wj / ws;
+						}
+					}
+				}
+			}
+			if (full) { let dyn = 0; for (let q = 0; q < nearBodies.length; q++) { const B = bodies[nearBodies[q]]; if (!B.stat && !B.asleep) dyn = 1; } nearFlag[i] = dyn; }
+			for (let q = 0; q < nearBodies.length; q++) {
+				const B = bodies[nearBodies[q]];
+				if (!full && body[i] < 0 && (B.stat || B.asleep)) continue;
+				collideWithBody(i, nearBodies[q]);
+			}
+		}
+	}
+
+	function staticCollide(i) {
+		pos(i, P0); const px = P0[0], py = P0[1];
+		const liq = cat[i] === CAT.LIQUID || cat[i] === CAT.GAS;
+		const fr = liq ? 0.02 : pFr[i];
+		// 화면 가장자리 = 벽
+		const lo = 0.5, hiX = W - 0.5, hiY = H - 0.5;
+		let dx = 0, dy = 0;
+		if (px < lo) dx = lo - px; else if (px > hiX) dx = hiX - px;
+		if (py < lo) dy = lo - py; else if (py > hiY) dy = hiY - py;
+		if (!dx && !dy) return;
+		const d = Math.hypot(dx, dy), nx = dx / d, ny = dy / d;
+		const w = invMass(i, px, py, nx, ny);
+		if (w <= 0) return;
+		const lam = d / w;
+		apply(i, px, py, nx * lam, ny * lam);
+		corr[i] = Math.max(corr[i], d);
+		const rxv = px - ox[i], ryv = py - oy[i], rn = rxv * nx + ryv * ny;
+		let tx = rxv - rn * nx, ty = ryv - rn * ny; const tl = Math.hypot(tx, ty);
+		if (tl < 1e-7) return;
+		tx /= tl; ty /= tl;
+		const wt = invMass(i, px, py, tx, ty);
+		if (wt <= 0) return;
+		let lt = tl / wt;
+		if (tl > fr * d * 1.5) lt = Math.min(lt, fr * lam);
+		apply(i, px, py, -tx * lt, -ty * lt);
+	}
+
+	// ---------------- 유체 (이중 밀도 완화) ----------------
+	const NB = 24, nbr = new Int32Array(CAP * NB), nbc = new Uint8Array(CAP), solidNb = new Uint8Array(CAP);
+	const nq = new Float32Array(CAP * NB), nnx = new Float32Array(CAP * NB), nny = new Float32Array(CAP * NB);
+	let fluidFlip = 0;
+	function fluid(dt, regather) {
+		const h2 = H_F * H_F, invH = 1 / H_F;
+		const sc = (dt / 0.5) * (dt / 0.5); // 압력 변위는 dt²에 비례 (서브스텝 수와 무관하게 같은 물)
+		if (regather) {
+		for (let k = 0; k < hashN; k++) {
+			const i = hashList[k];
+			nbc[i] = 0;
+			if (cat[i] !== CAT.LIQUID || zz[i]) continue;
+			const cx = Math.min(Math.max((x[i] / HC) | 0, 0), HW - 1), cy = Math.min(Math.max((y[i] / HC) | 0, 0), HH - 1), base = i * NB;
+			let cnt = 0, sn = 0;
+			for (let yy = cy - 1; yy <= cy + 1 && cnt < NB; yy++) {
+				if (yy < 0 || yy >= HH) continue;
+				for (let xx = cx - 1; xx <= cx + 1 && cnt < NB; xx++) {
+					if (xx < 0 || xx >= HW) continue;
+					const c = yy * HW + xx;
+					for (let s = cStart[c], e = cStart[c] + cCount[c]; s < e && cnt < NB; s++) {
+						const j = sorted[s];
+						if (j === i || cat[j] === CAT.GAS) continue;
+						const dx = x[j] - x[i], dy = y[j] - y[i];
+						if (dx * dx + dy * dy < h2 * 1.44) { nbr[base + cnt++] = j; if (cat[j] !== CAT.LIQUID) sn = 1; }
+					}
+				}
+			}
+			nbc[i] = cnt; solidNb[i] = sn || x[i] < 1.5 || y[i] < 1.5 || x[i] > W - 1.5 || y[i] > H - 1.5 ? 1 : 0;
+		}		}
+
+		fluidFlip ^= 1; // 매번 방문 순서를 뒤집어 한쪽으로 쏠리는 흐름(가짜 소용돌이) 방지
+		for (let kk = 0; kk < hashN; kk++) {
+			const k = fluidFlip ? hashN - 1 - kk : kk;
+			const i = hashList[k];
+			if (cat[i] !== CAT.LIQUID || zz[i]) continue;
+			const base = i * NB, cnt = nbc[i];
+			let r = 0, rn = 0;
+			const xi = x[i], yi = y[i];
+			// 1) 밀도: 이웃과의 거리·방향을 한 번만 계산해 두고 2)에서 다시 씀
+			for (let q = 0; q < cnt; q++) {
+				const j = nbr[base + q], bq = base + q;
+				const dx = x[j] - xi, dy = y[j] - yi, d2 = dx * dx + dy * dy;
+				if (d2 >= h2 || d2 < 1e-9) { nq[bq] = 0; continue; }
+				const d = Math.sqrt(d2), qq = 1 - d * invH, q2 = qq * qq;
+				nq[bq] = qq; nnx[bq] = dx / d; nny[bq] = dy / d;
+				r += q2; rn += q2 * qq;
+			}
+			// 벽을 이웃처럼 (벽 근처 밀도)
+			if (xi < 1) { const qq = 1 - xi; r += qq * qq * 1.5; rn += qq * qq * qq * 1.5; }
+			if (W - xi < 1) { const qq = 1 - (W - xi); r += qq * qq * 1.5; rn += qq * qq * qq * 1.5; }
+			if (yi < 1) { const qq = 1 - yi; r += qq * qq * 1.5; rn += qq * qq * qq * 1.5; }
+			if (H - yi < 1) { const qq = 1 - (H - yi); r += qq * qq * 1.5; rn += qq * qq * qq * 1.5; }
+			const P = KP * sc * (r - RHO0), PN = KN * sc * rn;
+			let dxi = 0, dyi = 0; const imi = 1 / pDens[i];
+			const dmax = 0.5 * sc, dmin = -0.2 * sc;
+			// 2) 압력으로 서로 밀어냄
+			for (let q = 0; q < cnt; q++) {
+				const bq = base + q, qq = nq[bq];
+				if (qq <= 0) continue;
+				const j = nbr[bq];
+				let Dv = P * qq + PN * qq * qq;
+				if (Dv > dmax) Dv = dmax; else if (Dv < dmin) Dv = dmin;
+				const nx = nnx[bq], ny = nny[bq];
+				const bj = body[j];
+				if (bj >= 0) {
+					const B = bodies[bj];
+					const wb = bodyInvMass(B, x[j], y[j], nx, ny);
+					const lam = Dv / (imi + wb);
+					bodyPush(B, x[j], y[j], nx * lam, ny * lam);
+					B.wet++;
+					dxi -= nx * lam * imi; dyi -= ny * lam * imi;
+				} else {
+					if (zz[j] && calm[i] < 10 && Math.abs(vx[i]) + Math.abs(vy[i]) > 0.4) { zz[j] = 0; calm[j] = 20; rx0[j] = x[j]; ry0[j] = y[j]; } // 실제로 움직이는 이웃만 깨움 (제자리 떨림은 무시)
+					const wj = anch[j] || zz[j] ? 0 : 1 / pDens[j];
+					const lam = Dv / (imi + wj);
+					x[j] += nx * lam * wj; y[j] += ny * lam * wj;
+					dxi -= nx * lam * imi; dyi -= ny * lam * imi;
+				}
+			}
+			x[i] += dxi; y[i] += dyi;
+		}
+	}
+	// 점성 + XSPH 속도 평활: 이웃과 속도를 조금씩 맞춰 떨림을 없앰 (전체 흐름은 유지)
+	const xv = new Float32Array(CAP), yv = new Float32Array(CAP);
+	function viscosity() {
+		const h2 = H_F * H_F, invH = 1 / H_F;
+		for (let k = 0; k < hashN; k++) {
+			const i = hashList[k];
+			if (cat[i] !== CAT.LIQUID || zz[i]) continue;
+			const base = i * NB, cnt = nbc[i], si = ELEMENTS[el[i]].visc;
+			let sx = 0, sy = 0, sw = 0;
+			for (let q = 0; q < cnt; q++) {
+				const j = nbr[base + q];
+				if (cat[j] !== CAT.LIQUID) continue;
+				const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy;
+				if (d2 >= h2 || d2 < 1e-9) continue;
+				const d = Math.sqrt(d2), qq = 1 - d * invH;
+				sx += (vx[j] - vx[i]) * qq; sy += (vy[j] - vy[i]) * qq; sw += qq;
+				if (j <= i) continue;
+				const nx = dx / d, ny = dy / d;
+				const u = (vx[i] - vx[j]) * nx + (vy[i] - vy[j]) * ny;
+				if (u <= 0) continue;
+				let I = qq * ((si + ELEMENTS[el[j]].visc) * 0.5 * u * 0.12 + 0.05 * u * u);
+				if (I > u * 0.5) I = u * 0.5;
+				I *= 0.5;
+				vx[i] -= I * nx; vy[i] -= I * ny; vx[j] += I * nx; vy[j] += I * ny;
+			}
+			const eps = Math.min(0.5, 0.25 + si * 0.02);
+			xv[i] = sw > 0 ? sx / sw * eps : 0; yv[i] = sw > 0 ? sy / sw * eps : 0;
+		}
+		for (let k = 0; k < hashN; k++) {
+			const i = hashList[k];
+			if (cat[i] !== CAT.LIQUID || zz[i]) continue;
+			vx[i] = (vx[i] + xv[i]) * 0.99; vy[i] = (vy[i] + yv[i]) * 0.99;
+		}
+	}
+
+
+	// ---------------- 공기 (파우더토이 Air::update_air 방식) ----------------
+	const AIR_TSTEPP = 0.3, AIR_TSTEPV = 0.4, AIR_VADV = 0.3, AIR_VLOSS = 0.999, AIR_PLOSS = 0.9999;
+	const KER = new Float32Array(9);
+	{ let s0 = 0; for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { const v = Math.exp(-2 * (i * i + j * j)); KER[(i + 1) + 3 * (j + 1)] = v; s0 += v; } for (let k = 0; k < 9; k++) KER[k] /= s0; }
+	function airStep() {
+		// 강체가 차지한 칸 = 공기를 막는 (움직이는) 벽
+		bcnt.fill(0); bvx.fill(0); bvy.fill(0);
+		for (const B of bodies) {
+			if (!B.alive) continue;
+			for (let k = 0; k < B.m.length; k++) {
+				const i = B.m[k]; pos(i, P0);
+				const a = aIdx(P0[0], P0[1]);
+				bcnt[a]++;
+				if (!B.stat && !B.asleep) { bvx[a] += B.vx - B.w * (P0[1] - B.cy); bvy[a] += B.vy + B.w * (P0[0] - B.cx); }
+			}
+		}
+		for (let a = 0; a < AN; a++) {
+			block[a] = bcnt[a] >= AC * AC * 0.55 ? 1 : 0;
+			if (bcnt[a]) { bvx[a] /= bcnt[a]; bvy[a] /= bcnt[a]; }
+		}
+		// 가장자리: 압력이 빠져나감
+		for (let y = 0; y < AH; y++) for (const x of [0, 1, AW - 2, AW - 1]) { const a = y * AW + x; pv[a] *= 0.8; avx[a] *= 0.9; avy[a] *= 0.9; }
+		for (let x = 0; x < AW; x++) for (const y of [0, 1, AH - 2, AH - 1]) { const a = y * AW + x; pv[a] *= 0.8; avx[a] *= 0.9; avy[a] *= 0.9; }
+		// 1) 속도 발산 → 압력
+		for (let y = 1; y < AH; y++) for (let x = 1; x < AW; x++) {
+			const a = y * AW + x;
+			if (block[a]) continue;
+			const dp = (avx[a - 1] - avx[a]) + (avy[a - AW] - avy[a]);
+			pv[a] = pv[a] * AIR_PLOSS + dp * AIR_TSTEPP;
+		}
+		// 2) 압력 차 → 속도
+		for (let y = 0; y < AH - 1; y++) for (let x = 0; x < AW - 1; x++) {
+			const a = y * AW + x;
+			const dx = pv[a] - pv[a + 1], dy = pv[a] - pv[a + AW];
+			avx[a] = avx[a] * AIR_VLOSS + dx * AIR_TSTEPV;
+			avy[a] = avy[a] * AIR_VLOSS + dy * AIR_TSTEPV;
+			if (block[a] || block[a + 1]) avx[a] = block[a] ? bvx[a] : bvx[a + 1];
+			if (block[a] || block[a + AW]) avy[a] = block[a] ? bvy[a] : bvy[a + AW];
+		}
+		// 3) 가우시안 평활 + 이류
+		for (let y = 0; y < AH; y++) for (let x = 0; x < AW; x++) {
+			const a = y * AW + x;
+			if (block[a]) { pv2[a] = pv[a] * 0.85; avx2[a] = avx[a]; avy2[a] = avy[a]; continue; }
+			let dh = 0, dx = 0, dy = 0;
+			for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+				const nx = x + i, ny = y + j, f = KER[(i + 1) + 3 * (j + 1)];
+				if (nx >= 0 && ny >= 0 && nx < AW && ny < AH && !block[ny * AW + nx]) { const b = ny * AW + nx; dh += pv[b] * f; dx += avx[b] * f; dy += avy[b] * f; }
+				else { dh += pv[a] * f; dx += avx[a] * f; dy += avy[a] * f; }
+			}
+			let tx = x - dx * AIR_VADV, ty = y - dy * AIR_VADV;
+			if (tx >= 2 && tx < AW - 3 && ty >= 2 && ty < AH - 3) {
+				const i = tx | 0, j = ty | 0; tx -= i; ty -= j;
+				const b = j * AW + i;
+				if (!block[b] && !block[b + 1] && !block[b + AW] && !block[b + AW + 1]) {
+					dx *= 1 - AIR_VADV; dy *= 1 - AIR_VADV;
+					dx += AIR_VADV * ((1 - tx) * (1 - ty) * avx[b] + tx * (1 - ty) * avx[b + 1] + (1 - tx) * ty * avx[b + AW] + tx * ty * avx[b + AW + 1]);
+					dy += AIR_VADV * ((1 - tx) * (1 - ty) * avy[b] + tx * (1 - ty) * avy[b + 1] + (1 - tx) * ty * avy[b + AW] + tx * ty * avy[b + AW + 1]);
+				}
+			}
+			if (dh > 256) dh = 256; else if (dh < -256) dh = -256;
+			if (dx > 256) dx = 256; else if (dx < -256) dx = -256;
+			if (dy > 256) dy = 256; else if (dy < -256) dy = -256;
+			pv2[a] = dh; avx2[a] = dx; avy2[a] = dy;
+		}
+		pv.set(pv2); avx.set(avx2); avy.set(avy2);
+		// 열: 공기 흐름 따라 이동 + 확산 + 식음, 뜨거운 공기는 위로 (대류)
+		for (let y = 0; y < AH; y++) for (let x = 0; x < AW; x++) {
+			const a = y * AW + x;
+			const sx = Math.min(Math.max(x - avx[a] / AC, 0), AW - 1.001), sy = Math.min(Math.max(y - avy[a] / AC, 0), AH - 1.001);
+			const i = sx | 0, j = sy | 0, tx = sx - i, ty = sy - j, b = j * AW + i;
+			hv2[a] = (1 - tx) * (1 - ty) * hv[b] + tx * (1 - ty) * hv[b + 1] + (1 - tx) * ty * hv[b + AW] + tx * ty * hv[b + AW + 1];
+		}
+		for (let y = 0; y < AH; y++) for (let x = 0; x < AW; x++) {
+			const a = y * AW + x;
+			let s0 = 0, c = 0;
+			if (x > 0) { s0 += hv2[a - 1]; c++; } if (x < AW - 1) { s0 += hv2[a + 1]; c++; }
+			if (y > 0) { s0 += hv2[a - AW]; c++; } if (y < AH - 1) { s0 += hv2[a + AW]; c++; }
+			let h = hv2[a] + (s0 / c - hv2[a]) * 0.12;
+			h += (AMB - h) * 0.015;
+			hv[a] = Math.min(1500, h);
+			if (!block[a]) avy[a] -= Math.min(0.02, (hv[a] - AMB) * 0.00003);
+		}
+	}
+
+	// ---------------- 폭발 ----------------
+	const flash = [];
+	let fireCount = 0;
+	function e_fireCount(D, pw) { return fireCount > 1100 ? 0 : pw > 1 ? 2 : (rnd() < 0.6 ? 1 : 0); }
+	function detonate(i) {
+		const D = ELEMENTS[el[i]];
+		pos(i, P0); const px = P0[0], py = P0[1];
+		const a = aIdx(px, py);
+		const pw = D.boom;
+		// 파우더토이처럼: 칸에 큰 압력 + 바깥으로 부는 폭풍 + 열 + 화염
+		pv[a] = Math.min(256, pv[a] + D.bp);
+		const cx = a % AW, cy = (a / AW) | 0;
+		for (let ddy = -1; ddy <= 1; ddy++) for (let ddx = -1; ddx <= 1; ddx++) {
+			if (!ddx && !ddy) continue;
+			const nx = cx + ddx, ny = cy + ddy;
+			if (nx < 0 || ny < 0 || nx >= AW || ny >= AH) continue;
+			const b = ny * AW + nx, l = Math.hypot(ddx, ddy);
+			pv[b] = Math.min(256, pv[b] + D.bp * 0.35);
+			avx[b] += ddx / l * D.bv; avy[b] += ddy / l * D.bv;
+		}
+		hv[a] = Math.min(800, hv[a] + pw * 15);
+		kill(i);
+		if (D.key === 'HYGN') { const st = add(px, py, E.STEM, 300); }
+		const nf = e_fireCount(D, pw);
+		for (let f = 0; f < nf; f++) {
+			const j = add(px + rnd() - 0.5, py + rnd() - 0.5, E.FIRE, 1400);
+			if (j < 0) break;
+			const ang = rnd() * Math.PI * 2, sp = (1 + rnd() * 3) * Math.min(2.5, pw);
+			vx[j] = Math.cos(ang) * sp; vy[j] = Math.sin(ang) * sp;
+			life[j] = (pw > 1 ? 14 : 8) + rnd() * (pw > 1 ? 22 : 12);
+		}
+		// 주변 폭발물 연쇄
+		for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+			const qx = Math.round(px) + dx, qy = Math.round(py) + dy;
+			if (qx < 0 || qy < 0 || qx >= W || qy >= H) continue;
+			const g = gocc[qy * W + qx] - 1;
+			if (g >= 0 && !dead[g] && ELEMENTS[el[g]].boom && !fuse[g]) fuse[g] = 1 + ((rnd() * 2) | 0);
+			const j = occ[qy * W + qx] - 1;
+			if (j >= 0 && !dead[j] && ELEMENTS[el[j]].boom && !fuse[j]) fuse[j] = el[j] === E.GUNP ? 3 + ((rnd() * 3) | 0) : 1 + ((rnd() * 2) | 0);
+		}
+		flash.push({ x: px, y: py, r: 3 + pw * 3, t: 0 });
+	}
+
+	// ---------------- 열과 반응 ----------------
+	const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+	function nb(px, py, k) { // k번째 이웃 입자 (없으면 -1)
+		const ax = Math.round(px) + N4[k][0], ay = Math.round(py) + N4[k][1];
+		if (ax < 0 || ay < 0 || ax >= W || ay >= H) return -1;
+		const j = occ[ay * W + ax] - 1;
+		return j >= 0 && !dead[j] ? j : -1;
+	}
+	function gnb(px, py, k) {
+		const ax = Math.round(px) + (k < 0 ? 0 : N4[k][0]), ay = Math.round(py) + (k < 0 ? 0 : N4[k][1]);
+		if (ax < 0 || ay < 0 || ax >= W || ay >= H) return -1;
+		const j = gocc[ay * W + ax] - 1;
+		return j >= 0 && !dead[j] ? j : -1;
+	}
+	function cellFree(ax, ay) { return ax >= 0 && ay >= 0 && ax < W && ay < H && !occ[ay * W + ax]; }
+	function reactions() {
+		// 점유 격자 (기체는 따로)
+		occ.fill(0); gocc.fill(0);
+		for (let i = 0; i < n; i++) {
+			if (dead[i]) continue;
+			if (cat[i] === CAT.GAS) { const qx = Math.round(x[i]), qy = Math.round(y[i]); if (qx >= 0 && qy >= 0 && qx < W && qy < H) gocc[qy * W + qx] = i + 1; continue; }
+			pos(i, P0);
+			const qx = Math.round(P0[0]), qy = Math.round(P0[1]);
+			if (qx >= 0 && qy >= 0 && qx < W && qy < H) occ[qy * W + qx] = i + 1;
+		}
+		fireCount = 0;
+		for (let i = 0; i < n; i++) if (!dead[i] && (el[i] === E.FIRE || el[i] === E.PLSM)) fireCount++;
+		// 1) 입자끼리 열전도 (오른쪽·아래 이웃과 교환)
+		for (let q = 0; q < W * H; q++) {
+			const i = occ[q] - 1; if (i < 0) continue;
+			const ci = ELEMENTS[el[i]].cond; if (!ci) continue;
+			const qx = q % W;
+			if (qx < W - 1) { const j = occ[q + 1] - 1; if (j >= 0) { const cj = ELEMENTS[el[j]].cond; if (cj) { const d = (temp[j] - temp[i]) * Math.sqrt(ci * cj) * 0.25; temp[i] += d; temp[j] -= d; } } }
+			if (q + W < W * H) { const j = occ[q + W] - 1; if (j >= 0) { const cj = ELEMENTS[el[j]].cond; if (cj) { const d = (temp[j] - temp[i]) * Math.sqrt(ci * cj) * 0.25; temp[i] += d; temp[j] -= d; } } }
+		}
+		const nn = n;
+		for (let i = 0; i < nn; i++) {
+			if (dead[i]) continue;
+			const e = el[i], D = ELEMENTS[e];
+			if (e === E.WALL) continue;
+			pos(i, P0); const px = P0[0], py = P0[1];
+			const a = aIdx(px, py);
+			// 잠든 입자가 주변과 같은 온도면 반응 검사를 격 프레임으로 (최적화)
+			if (zz[i] && ((i + frame) & 1) && !burning[i] && !fuse[i] && Math.abs(temp[i] - hv[a]) < 3) continue;
+			// 발열판·냉각판: 온도 고정 + 주변 공기
+			if (D.thermo !== undefined) { temp[i] = D.thermo; hv[a] += (D.thermo - hv[a]) * 0.02; continue; }
+			// 2) 공기 칸과 열 교환
+			if (e !== E.FIRE && e !== E.PLSM && !D.fixed) {
+				const k = D.cat === CAT.GAS ? 0.08 : e === E.LAVA ? 0.0015 : D.cat === CAT.LIQUID ? 0.003 + (D.cond || 0) * 0.006 : 0.002 + (D.cond || 0) * 0.004;
+				const dT = (hv[a] - temp[i]) * k;
+				temp[i] += dT;
+				hv[a] -= dT * Math.min(1, 0.05 * D.dens);
+			}
+			if (D.cat === CAT.GAS) {
+				const qx = Math.round(px), qy = Math.round(py);
+				if (qx >= 0 && qy >= 0 && qx < W && qy < H) { const j = occ[qy * W + qx] - 1; if (j >= 0 && ELEMENTS[el[j]].voidp) { kill(i); continue; } }
+			}
+			// ---- 불·플라즈마
+			if (e === E.FIRE || e === E.PLSM) {
+				life[i] -= 1;
+				if (e === E.FIRE) temp[i] *= 0.985;
+				if (hv[a] < temp[i]) hv[a] += (temp[i] - hv[a]) * (e === E.PLSM ? 0.05 : 0.02);
+				// 산소는 불을 키우고, 이산화탄소는 불을 끔
+				for (let k = 0; k < 9; k++) {
+					const ax = Math.round(px) + (k % 3) - 1, ay = Math.round(py) + ((k / 3) | 0) - 1;
+					if (ax < 0 || ay < 0 || ax >= W || ay >= H) continue;
+					const g = gocc[ay * W + ax] - 1;
+					if (g < 0 || g === i || dead[g]) continue;
+					if (ELEMENTS[el[g]].oxy) { kill(g); temp[i] = Math.min(2200, temp[i] + 350); life[i] += 15; if (fireCount < 900) { const f = add(px, py, E.FIRE, temp[i]); if (f >= 0) { vx[f] = (rnd() - 0.5); vy[f] = -rnd(); } } }
+					else if (ELEMENTS[el[g]].quench && e === E.FIRE) life[i] = 0;
+					else if (ELEMENTS[el[g]].boom && !fuse[g]) fuse[g] = 1;
+					else if (ELEMENTS[el[g]].ignite && !burning[g]) temp[g] = Math.max(temp[g], ELEMENTS[el[g]].ignite + 5);
+				}
+				for (let k = -1; k < 4; k++) {
+					let j;
+					if (k < 0) { const qx = Math.round(px), qy = Math.round(py); j = qx >= 0 && qy >= 0 && qx < W && qy < H ? occ[qy * W + qx] - 1 : -1; }
+					else j = nb(px, py, k);
+					if (j < 0 || dead[j]) continue;
+					if (el[j] === E.WATR || el[j] === E.SLTW) { temp[j] += 6; if (e === E.FIRE) { life[i] = 0; break; } }
+					const Dj = ELEMENTS[el[j]];
+					if (Dj.boom) { if (!fuse[j] && rnd() < 0.5) fuse[j] = el[j] === E.GUNP ? 2 : 1; }
+					else if (Dj.ignite) { temp[j] += 40; if (rnd() < (Dj.flam || 0.06)) temp[j] = Math.max(temp[j], Dj.ignite + 5); }
+					else temp[j] += e === E.PLSM ? 120 : 3;
+				}
+				if (life[i] <= 0) { if (e === E.FIRE && rnd() < 0.25) { const sm = add(px, py, E.SMKE); if (sm >= 0) { vx[sm] = vx[i] * 0.3; vy[sm] = vy[i] * 0.3; } } kill(i); }
+				continue;
+			}
+			if (e === E.SMKE) { life[i] -= 1; if (life[i] <= 0) kill(i); continue; }
+			if (e === E.EMBR) {
+				life[i] -= 1; temp[i] *= 0.99;
+				const j = nb(px, py, (rnd() * 4) | 0);
+				if (j >= 0) { const Dj = ELEMENTS[el[j]]; if (Dj.boom && !fuse[j] && rnd() < 0.3) fuse[j] = 1; else if (Dj.ignite && rnd() < 0.2) temp[j] = Math.max(temp[j], Dj.ignite + 5); }
+				if (life[i] <= 0) kill(i);
+				continue;
+			}
+			if (e === E.STEM) {
+				life[i] -= 1;
+				if (temp[i] < 95 && rnd() < 0.02) { changeType(i, E.WATR); temp[i] = 90; continue; }
+				if (life[i] <= 0) kill(i);
+				continue;
+			}
+			if (e === E.NGAS) {
+				life[i] -= 1;
+				if (life[i] <= 0) kill(i);
+				continue;
+			}
+			// ---- 블랙홀: 닿는 건 모두 사라짐
+			if (D.voidp) {
+				if (!boundary[i] && body[i] >= 0) continue;
+				for (let k = 0; k < 4; k++) { const j = nb(px, py, k); if (j >= 0 && !ELEMENTS[el[j]].fixed) kill(j); const g = gnb(px, py, k); if (g >= 0) kill(g); }
+				continue;
+			}
+			// ---- 복제기: 처음 닿은 물질을 계속 만들어냄
+			if (D.clone) {
+				if (body[i] >= 0 && !boundary[i]) continue;
+				if (!ctype[i]) {
+					for (let k = 0; k < 4 && !ctype[i]; k++) {
+						const j = nb(px, py, k); if (j >= 0 && !ELEMENTS[el[j]].fixed) ctype[i] = el[j];
+						const g = gnb(px, py, k); if (!ctype[i] && g >= 0) ctype[i] = el[g];
+					}
+				} else if (rnd() < 0.12) {
+					const k = (rnd() * 4) | 0, ax = Math.round(px) + N4[k][0], ay = Math.round(py) + N4[k][1];
+					const Dc = ELEMENTS[ctype[i]];
+					if (Dc.cat === CAT.SOLID) { if (cellFree(ax, ay) && n < CAP - 50) { const j = add(ax, ay, ctype[i]); if (j >= 0) { fresh[j] = 1; freshAt[j] = frame; occ[ay * W + ax] = j + 1; } } }
+					else if (cellFree(ax, ay) && n < CAP - 50) { const j = add(ax + rnd() * 0.3, ay + rnd() * 0.3, ctype[i]); if (j >= 0 && Dc.cat !== CAT.GAS) occ[ay * W + ax] = j + 1; }
+				}
+				continue;
+			}
+			// ---- 식물·씨앗: 물을 먹고 자람
+			if (D.grow || D.seed) {
+				const j = nb(px, py, (rnd() * 4) | 0);
+				if (j >= 0 && (el[j] === E.WATR || el[j] === E.MUD) && rnd() < (D.seed ? 0.03 : 0.08)) {
+					changeType(j, E.PLNT); anch[j] = 1; fresh[j] = 0; vx[j] = vy[j] = 0;
+					if (D.seed) { changeType(i, E.PLNT); anch[i] = 1; fresh[i] = 0; vx[i] = vy[i] = 0; }
+				}
+				if (!D.ignite || !burning[i]) { if (!(D.ignite && temp[i] > D.ignite)) continue; }
+			}
+			// ---- 시멘트: 물을 만나면 굳어 돌
+			if (D.sets) {
+				const j = nb(px, py, (rnd() * 4) | 0);
+				if (j >= 0 && el[j] === E.WATR && rnd() < 0.03) { kill(j); changeType(i, E.STON); }
+				continue;
+			}
+			// ---- 쇳가루: 물을 만나면 천천히 녹슮
+			if (e === E.IRNP) {
+				const j = nb(px, py, (rnd() * 4) | 0);
+				if (j >= 0 && (el[j] === E.WATR || el[j] === E.SLTW) && rnd() < (el[j] === E.SLTW ? 0.004 : 0.0015)) changeType(i, E.RUST);
+			}
+			// ---- 불꽃놀이: 불이 붙으면 솟아올라 색색 불티로 터짐
+			if (D.firework) {
+				if (!burning[i]) {
+					if (temp[i] <= D.ignite) continue;
+					burning[i] = 28 + rnd() * 26; zz[i] = 0; calm[i] = 0;
+					vy[i] = -2.6 - rnd() * 0.8; vx[i] = (rnd() - 0.5) * 0.7;
+					ctype[i] = (rnd() * 255) | 0;
+				}
+				vy[i] -= 0.15; vx[i] *= 0.985; zz[i] = 0;
+				if (fireCount < 900 && rnd() < 0.55) { const f = add(px + (rnd() - 0.5), py + 1, E.FIRE, 700 + rnd() * 300); if (f >= 0) { vx[f] = (rnd() - 0.5) * 0.4; vy[f] = 0.4 + rnd() * 0.3; life[f] = 6 + rnd() * 8; } }
+				burning[i] -= 1;
+				if (burning[i] <= 0 || py < 4) {
+					const hue = ctype[i], hue2 = (hue + 40 + ((rnd() * 60) | 0)) & 255, cnt = 34 + ((rnd() * 18) | 0);
+					for (let k = 0; k < cnt; k++) {
+						const j = add(px, py, E.EMBR, 1200);
+						if (j < 0) break;
+						const ang = (k / cnt) * Math.PI * 2 + rnd() * 0.2, sp = 1.4 + rnd() * 1.6;
+						vx[j] = Math.cos(ang) * sp + vx[i] * 0.3; vy[j] = Math.sin(ang) * sp + vy[i] * 0.3;
+						ctype[j] = k % 3 === 0 ? hue2 : hue; life[j] = 35 + rnd() * 40;
+					}
+					pv[a] = Math.min(256, pv[a] + 3); hv[a] = Math.min(1500, hv[a] + 80);
+					flash.push({ x: px, y: py, r: 4, t: 0 });
+					kill(i);
+				}
+				continue;
+			}
+			// ---- 우라늄: 스스로 뜨거워짐
+			if (D.selfHeat) temp[i] += D.selfHeat;
+			// ---- 나트륨 + 물 → 수소 + 불꽃
+			if (D.natr) {
+				const j = nb(px, py, (rnd() * 4) | 0);
+				if (j >= 0 && (el[j] === E.WATR || el[j] === E.SLTW) && rnd() < 0.1) {
+					changeType(j, E.HYGN); vy[j] -= 0.5; temp[i] += 250;
+					if (fireCount < 900) { const f = add(px, py - 1, E.FIRE, 1100); if (f >= 0) { vx[f] = (rnd() - 0.5) * 1.5; vy[f] = -0.5 - rnd(); } }
+					pv[a] = Math.min(256, pv[a] + 1.5);
+					if (rnd() < 0.25) { kill(i); continue; }
+				}
+			}
+			// ---- 스펀지: 물을 빨아들이고 뜨거우면 수증기로
+			if (D.sponge && !burning[i]) {
+				const j = nb(px, py, (rnd() * 4) | 0);
+				if (j >= 0 && (el[j] === E.WATR || el[j] === E.SLTW) && life[i] < 40 && rnd() < 0.15) { kill(j); life[i] += 1; }
+				if (temp[i] > 100 && life[i] > 0 && rnd() < 0.1) { const s2 = add(px, py - 1, E.STEM, 110); if (s2 >= 0) vy[s2] = -0.4; life[i] -= 1; temp[i] -= 20; }
+				if (life[i] > 0 && temp[i] > 200) temp[i] = 200; // 젖은 스펀지는 잘 안 탐
+			}
+			// ---- 흙 + 물 → 진흙
+			if (e === E.DIRT) {
+				const j = nb(px, py, (rnd() * 4) | 0);
+				if (j >= 0 && el[j] === E.WATR && rnd() < 0.02) { kill(j); changeType(i, E.MUD); }
+				continue;
+			}
+			// ---- 폭발물 (가스 포함)
+			if (D.boom) {
+				if (fuse[i] > 0) { fuse[i]--; if (fuse[i] === 0) { detonate(i); continue; } }
+				else if (temp[i] > D.ignite || (D.sens && Math.abs(pv[a]) > D.sens)) fuse[i] = e === E.GUNP ? 2 : 1;
+				continue;
+			}
+			// ---- 끓음 (잠열: 끓는 동안 온도 유지하며 열을 먹음)
+			if (D.boil !== undefined && temp[i] > D.boil && !burning[i] && !(D.ignite && temp[i] > D.ignite)) {
+				if (rnd() < 0.03) {
+					if (e === E.LN2) { changeType(i, E.NGAS); temp[i] = -190; vy[i] -= 0.2; }
+					else if (e === E.SLTW && rnd() < 0.35) { changeType(i, E.SALT); }
+					else if (D.boilTo) { changeType(i, E[D.boilTo]); vy[i] -= 0.2; }
+					else { changeType(i, E.STEM); temp[i] = 110; vy[i] -= 0.3; }
+					hv[a] = Math.max(-270, hv[a] - (e === E.LN2 ? -10 : 60));
+				} else { temp[i] = D.boil; hv[a] -= e === E.LN2 ? -2 : 4; }
+				continue;
+			}
+			// ---- 얼음 (잠열)
+			if (D.lo && temp[i] < D.lo.t) {
+				if (rnd() < 0.05) { changeType(i, E[D.lo.to]); temp[i] = D.lo.t - 4; }
+				else temp[i] = D.lo.t;
+				continue;
+			}
+			// ---- 녹음
+			if (D.hi && temp[i] > D.hi.t && !burning[i]) {
+				if (rnd() < (D.hi.to === 'WATR' ? 0.012 : 0.05)) {
+					const to = E[D.hi.to];
+					changeType(i, to, to === E.LAVA ? (D.hi.ct ? E[D.hi.ct] : e) : undefined);
+					if (to === E.WATR) temp[i] = D.hi.t + 3;
+				} else temp[i] = Math.min(temp[i], D.hi.t + 5);
+				continue;
+			}
+			// ---- 용암: 식으면 원래 물질로 굳음
+			if (e === E.LAVA) {
+				{ const j = nb(px, py, (rnd() * 4) | 0); if (j >= 0 && (el[j] === E.WATR || el[j] === E.SLTW) && rnd() < 0.12) { changeType(j, E.STEM); temp[j] = 110; vy[j] -= 0.4; changeType(i, E.OBSD); temp[i] = 350; continue; } }
+				const ct = ctype[i] || E.STON, mT = ELEMENTS[ct].melt || 1000;
+				if (temp[i] < mT - 30 && rnd() < 0.08) { changeType(i, ct === E.STON || ct === E.BRCK ? E.GRVL : ct); continue; }
+				if (fireCount < 900 && rnd() < 0.004) { const f = add(px, py - 1, E.FIRE, temp[i]); if (f >= 0) vy[f] = -0.3; }
+				continue;
+			}
+			// ---- 산: 닿는 걸 녹임
+			if (D.acid) {
+				const j = nb(px, py, (rnd() * 4) | 0);
+				if (j >= 0 && rnd() < 0.08) {
+					const t2 = el[j];
+					if (!ELEMENTS[t2].acid && t2 !== E.GLAS && t2 !== E.DMND && t2 !== E.WALL && ELEMENTS[t2].cat !== CAT.GAS) {
+						kill(j); life[i] += 1; temp[i] += 8;
+						if (rnd() < 0.3) add(px, py - 1, E.SMKE);
+						if (life[i] > 10) { kill(i); continue; }
+					}
+				}
+				continue;
+			}
+			// ---- 소금 + 물 → 소금물
+			if (D.dissolve) {
+				const j = nb(px, py, (rnd() * 4) | 0);
+				if (j >= 0 && el[j] === E.WATR && rnd() < 0.03) { changeType(j, E.SLTW); kill(i); }
+				continue;
+			}
+			// ---- 가연성
+			if (D.ignite) {
+				if (!burning[i] && temp[i] > D.ignite) burning[i] = D.burn * (0.7 + rnd() * 0.6);
+				if (burning[i]) {
+					temp[i] = Math.max(temp[i], D.hot || D.ignite + 250);
+					if (hv[a] < 700) hv[a] += e === E.COAL ? 4 : 2.5;
+					let wet = false;
+					for (let k = 0; k < 4; k++) { const j = nb(px, py, k); if (j >= 0 && (el[j] === E.WATR || el[j] === E.SLTW)) { wet = true; temp[j] += 25; } }
+					// 이산화탄소가 덮으면 산소가 막혀 꺼짐
+					for (let k = -1; k < 4 && !wet; k++) { const g = gnb(px, py, k); if (g >= 0 && ELEMENTS[el[g]].quench) { wet = true; if (rnd() < 0.05) kill(g); } }
+					if (wet) { burning[i] = 0; temp[i] = Math.min(temp[i], (D.ignite || 300) - 40); continue; }
+					// 도화선: 타는 속도가 일정하게, 끊기지 않고 옆으로 번짐
+					if (e === E.FUSE && burning[i] < D.burn * 0.6) for (let k = 0; k < 4; k++) { const j = nb(px, py, k); if (j >= 0 && !burning[j]) { const Dj = ELEMENTS[el[j]]; if (Dj.boom) { if (!fuse[j]) fuse[j] = el[j] === E.GUNP ? 2 : 1; } else if (el[j] === E.FUSE || Dj.firework) temp[j] = Math.max(temp[j], Dj.ignite + 5); } }
+					// 옆의 가연물로 불이 번짐 (겉면끼리만)
+					{ const j = nb(px, py, (rnd() * 4) | 0); if (j >= 0 && !burning[j] && (body[j] < 0 || boundary[j])) { const Dj = ELEMENTS[el[j]]; if (Dj.boom) { if (!fuse[j] && rnd() < 0.3) fuse[j] = el[j] === E.GUNP ? 2 : 1; } else if (Dj.ignite && rnd() < (Dj.flam || 0.06) * 0.35) temp[j] = Math.max(temp[j], Dj.ignite + 5); } }
+					const exposed = body[i] < 0 || boundary[i];
+					if (exposed && (D.smoky ? n < CAP - 4000 : fireCount < 900) && rnd() < (D.smoky ? 0.12 : e === E.OIL || e === E.NAPM || e === E.GASO ? 0.13 : e === E.SAWD ? 0.14 : e === E.COAL ? 0.03 : e === E.FUSE ? 0.25 : 0.09)) {
+						const j = add(px + (rnd() - 0.5), py - 0.6, D.smoky ? E.SMKE : E.FIRE, D.smoky ? 200 : 700 + rnd() * 300);
+						if (j >= 0) { vx[j] = (rnd() - 0.5) * 0.3; vy[j] = -0.2 - rnd() * 0.3; }
+					}
+					burning[i] -= 1;
+					if (burning[i] <= 0) {
+						if (rnd() < 0.3) add(px, py, E.SMKE);
+						if ((e === E.WOOD || e === E.SAWD || e === E.COAL) && rnd() < (e === E.SAWD ? 0.25 : 0.5)) { changeType(i, E.ASH); temp[i] = 300; }
+						else if (e === E.THRM) { changeType(i, E.LAVA, E.IRON); temp[i] = 2800; } // 테르밋 → 녹은 철
+						else kill(i);
+					}
+				}
+			}
+		}
+	}
+	// 굳은 입자(용암→돌, 물→얼음 등)를 이웃끼리 묶어 새 강체로
+	function solidify() {
+		const list = [];
+		for (let i = 0; i < n; i++) {
+			if (dead[i] || !fresh[i] || body[i] !== FREE || cat[i] !== CAT.SOLID) continue;
+			if (frame - freshAt[i] < 40) continue;
+			if (Math.abs(vx[i]) + Math.abs(vy[i]) > 0.6) continue;
+			list.push(i);
+		}
+		if (!list.length) return;
+		const map = new Map();
+		for (const i of list) { gx[i] = Math.round(x[i]); gy[i] = Math.round(y[i]); map.set(lkey(gx[i], gy[i]), i); }
+		const seen = new Set();
+		for (const i0 of list) {
+			if (seen.has(i0)) continue;
+			const comp = [], st = [i0]; seen.add(i0);
+			while (st.length) {
+				const a = st.pop(); comp.push(a);
+				for (const d of N4) {
+					const j = map.get(lkey(gx[a] + d[0], gy[a] + d[1]));
+					if (j === undefined || seen.has(j) || el[j] !== el[a]) continue;
+					seen.add(j); st.push(j);
+				}
+			}
+			// 옆에 먼저 굳은 같은 물질 덩어리가 있으면 거기에 붙여 한 덩어리로
+			let host = null;
+			for (const a of comp) {
+				for (const d of N4) {
+					const qx = gx[a] + d[0], qy = gy[a] + d[1];
+					if (qx < 0 || qy < 0 || qx >= W || qy >= H) continue;
+					const j = occ[qy * W + qx] - 1;
+					if (j < 0 || body[j] < 0 || el[j] !== el[a]) continue;
+					const B = bodies[body[j]];
+					if (B.cast && Math.abs(Math.sin(B.th)) < 0.03 && Math.hypot(B.vx, B.vy) < 0.3) { host = B; break; }
+				}
+				if (host) break;
+			}
+			if (host) {
+				const bid = bodies.indexOf(host);
+				for (const a of comp) { gx[a] = Math.round(x[a] - host.cx + host.gcx); gy[a] = Math.round(y[a] - host.cy + host.gcy); fresh[a] = 0; }
+				const all = host.m.concat(comp);
+				const occL = new Set(host.m.map(i => lkey(gx[i], gy[i])));
+				const ok = comp.every(a => !occL.has(lkey(gx[a], gy[a])));
+				if (ok) {
+					host.alive = false;
+					const nb2 = makeBody(all, host.stat, all.map(() => 0), all.map(() => 0), host.th);
+					if (nb2 >= 0) bodies[nb2].cast = true;
+					continue;
+				}
+			}
+			if (comp.length >= 2) { for (const i of comp) fresh[i] = 0; const nb2 = makeBody(comp, false, comp.map(i => vx[i]), comp.map(i => vy[i]), 0); if (nb2 >= 0) bodies[nb2].cast = true; }
+			else if (frame - freshAt[comp[0]] > 150) fresh[comp[0]] = 0;
+		}
+	}
+	const detachNow = [];
+
+	// ---------------- 한 프레임 ----------------
+	const wakeNext = [];
+	let frame = 0, lastSub = 2;
+	let G = 0.1;
+	function step() {
+		frame++;
+		G = 0.1 * gravity;
+		airStep();
+		reactions();
+		solidify();
+		// 타서 재가 된 입자 / 죽은 입자 → 바디 재분할
+		if (dirty.size) {
+			const det = new Set(detachNow);
+			for (const b of dirty) {
+				const B = bodies[b]; if (!B || !B.alive) continue;
+				const mask = B.m.map(i => det.has(i) ? 1 : 0);
+				split(b, null, mask, null);
+			}
+			dirty.clear(); detachNow.length = 0;
+		}
+		for (const B of wakeNext) wake(B);
+		wakeNext.length = 0;
+		if (frame % 30 === 0) for (const B of bodies) if (B.alive && B.asleep) { wake(B); B.still = 13; }
+
+		applyGrab();
+		// 동적 목록
+		const dynB = [];
+		for (const B of bodies) if (B.alive && !B.stat && !B.asleep) dynB.push(B);
+		// 공기 힘 (바디: 겉면 입자마다 압력 기울기 + 바람 끌림)
+		for (const B of bodies) {
+			if (!B.alive) continue;
+			if (B.stat) { // 고정된 바디도 압력에는 부서짐
+				let pmax = 0, pmaxI = -1;
+				for (let k = 0; k < B.m.length; k++) {
+					const i = B.m[k]; if (!boundary[i]) continue;
+					const ap = Math.abs(pv[aIdx(x[i], y[i])]) / ELEMENTS[el[i]].pstr;
+					if (ap > pmax) { pmax = ap; pmaxI = i; }
+				}
+				B.pbreak = pmax > 1 ? pmaxI : -1; B.pbv = pmax;
+				continue;
+			}
+			let fx = 0, fy = 0, tq = 0, pmax = 0, pmaxI = -1;
+			for (let k = 0; k < B.m.length; k++) {
+				const i = B.m[k];
+				if (!boundary[i]) continue;
+				pos(i, P0); airAt(P0[0], P0[1], AIR);
+				const ax = -AIR.gx * PF + (AIR.vx - B.vx) * 0.03, ay = -AIR.gy * PF + (AIR.vy - B.vy) * 0.03;
+				fx += ax; fy += ay; tq += (P0[0] - B.cx) * ay - (P0[1] - B.cy) * ax;
+				const ap = Math.abs(AIR.p) / ELEMENTS[el[i]].pstr;
+				if (ap > pmax) { pmax = ap; pmaxI = i; }
+			}
+			B.fax = fx / B.M; B.fay = fy / B.M; B.tq = tq / B.I;
+			if (B.asleep && Math.hypot(B.fax, B.fay) > 0.01) { wake(B); if (dynB.indexOf(B) < 0) dynB.push(B); }
+			B.pbreak = pmax > 1 ? pmaxI : -1; B.pbv = pmax;
+		}
+		for (const B of bodies) B.bounced = 0;
+		// 입자 ↔ 공기 (운동량 교환): 입자는 공기 속도 쪽으로, 공기는 그 칸 입자들의 평균 속도 쪽으로
+		acnt.fill(0); asvx.fill(0); asvy.fill(0);
+		for (let i = 0; i < n; i++) {
+			if (dead[i] || body[i] >= 0 || anch[i]) continue;
+			const D = ELEMENTS[el[i]];
+			if (!D.adv) continue;
+			if (zz[i]) {
+				if ((i + frame) % 4) continue;
+				airAt(x[i], y[i], AIR);
+				if (Math.abs(AIR.vx) + Math.abs(AIR.vy) > 0.5 || (Math.abs(AIR.gx) + Math.abs(AIR.gy)) * PF / D.dens > 0.02) { zz[i] = 0; calm[i] = 0; } else continue;
+			}
+			airAt(x[i], y[i], AIR);
+			const kp = D.kp;
+			vx[i] += (AIR.vx - vx[i]) * kp;
+			vy[i] += (AIR.vy - vy[i]) * kp + (D.grav || 0);
+			const a = aIdx(x[i], y[i]);
+			acnt[a] += D.dens; asvx[a] += vx[i] * D.dens; asvy[a] += vy[i] * D.dens;
+			if (D.hotair && !block[a]) pv[a] += D.hotair;
+		}
+		for (let a = 0; a < AN; a++) {
+			if (!acnt[a] || block[a]) continue;
+			const f = Math.min(1, acnt[a] / (AC * AC)) * 0.12;
+			avx[a] += (asvx[a] / acnt[a] - avx[a]) * f;
+			avy[a] += (asvy[a] / acnt[a] - avy[a]) * f;
+		}
+		// 서브스텝 수
+		let vmax = 0;
+		for (const B of dynB) vmax = Math.max(vmax, Math.hypot(B.vx, B.vy) + Math.abs(B.w) * B.rmax);
+		for (let i = 0; i < n; i++) if (!dead[i] && body[i] < 0 && cat[i] === CAT.POWDER) vmax = Math.max(vmax, Math.max(Math.abs(vx[i]), Math.abs(vy[i])));
+		vmax = Math.min(vmax + G * 2, VMAX);
+		const SUB = Math.min(8, Math.max(3, Math.ceil(vmax / MAXD))); // 최소 3: 깊은 물 바닥이 끓어오르듯 뒤섞이는 현상 방지
+		lastSub = SUB;
+		const dt = 1 / SUB, maxv = MAXD / dt;
+
+		for (let s = 0; s < SUB; s++) {
+			// 1) 적분
+			for (const B of dynB) {
+				B.pcx = B.cx; B.pcy = B.cy; B.pth = B.th;
+				B.vx += B.fax * dt; B.vy += (G + B.fay) * dt; B.w += B.tq * dt;
+				const sp = Math.hypot(B.vx, B.vy) + Math.abs(B.w) * B.rmax;
+				if (sp > maxv) { const f = maxv / sp; B.vx *= f; B.vy *= f; B.w *= f; }
+				B.pvx = B.vx; B.pvy = B.vy; B.pw = B.w;
+				B.cx += B.vx * dt; B.cy += B.vy * dt; setAngle(B, B.th + B.w * dt);
+			}
+			hashN = 0;
+			for (let i = 0; i < n; i++) {
+				if (dead[i]) continue;
+				const b = body[i];
+				if (b >= 0) {
+					if (!boundary[i]) continue;
+					const B = bodies[b];
+					const c0 = Math.cos(B.pth), s0 = Math.sin(B.pth), k = bidx[i];
+					ox[i] = B.pcx + c0 * B.qx[k] - s0 * B.qy[k]; oy[i] = B.pcy + s0 * B.qx[k] + c0 * B.qy[k];
+					pos(i, P0); x[i] = P0[0]; y[i] = P0[1];
+					hashList[hashN++] = i;
+					continue;
+				}
+				ox[i] = x[i]; oy[i] = y[i];
+				if (anch[i] || zz[i]) { hashList[hashN++] = i; continue; }
+				const c = cat[i];
+				if (c === CAT.GAS) {
+					const up = el[i] === E.FIRE ? temp[i] * 0.00003 : 0;
+					vx[i] += (rnd() - 0.5) * 0.15 * dt; vy[i] += ((rnd() - 0.5) * 0.15 - up) * dt;
+				} else vy[i] += G * dt;
+				const sp = Math.abs(vx[i]) + Math.abs(vy[i]);
+				if (sp > maxv) { vx[i] *= maxv / sp; vy[i] *= maxv / sp; }
+				x[i] += vx[i] * dt; y[i] += vy[i] * dt;
+				hashList[hashN++] = i;
+			}
+			buildHash();
+			fluid(dt, s === 0);
+			for (let it = 0; it < ITERS; it++) {
+				const full = it < 2;
+				if (!full && !dynB.length) break;
+				contacts(full);
+				for (let k = 0; k < hashN; k++) { const i = hashList[k]; if (movable(i) && (full || body[i] >= 0 || nearFlag[i])) staticCollide(i); }
+				commit(dynB);
+			}
+			for (const B of dynB) {
+				B.vx = (B.cx - B.pcx) / dt; B.vy = (B.cy - B.pcy) / dt; B.w = (B.th - B.pth) / dt;
+				if (B.bounce) { // 고무: 부딪혀 잃은 속도의 일부를 되돌려 튕김
+					const dvx = B.vx - B.pvx, dvy = B.vy - B.pvy, dl = Math.hypot(dvx, dvy);
+					if (dl > 0.3 && !B.bounced) {
+						// 충돌 방향으로, 부딪히기 전 속도를 되튕김 (한 프레임에 한 번)
+						const nx = dvx / dl, ny = dvy / dl, vpre = B.pvx * nx + B.pvy * ny, vnow = B.vx * nx + B.vy * ny;
+						if (vpre < 0) { const add = -B.bounce * vpre - vnow; B.vx += nx * add; B.vy += ny * add; B.bounced = 1; }
+					}
+				}
+				if (B.wet) { // 물속 저항
+					const perim = Math.max(4, B.m.length - B.m.filter(i => !boundary[i]).length);
+					const f = Math.min(0.12, 0.1 * B.wet / (perim * 6)) * dt * 3;
+					B.vx *= 1 - f; B.vy *= 1 - f; B.w *= 1 - f * 1.5; B.wet = 0;
+				}
+				B.impact += Math.hypot(B.vx - B.pvx, B.vy - B.pvy) + Math.abs(B.w - B.pw) * B.rmax * 0.5;
+			}
+			for (let k = 0; k < hashN; k++) {
+				const i = hashList[k];
+				if (body[i] >= 0 || anch[i] || zz[i]) continue;
+				vx[i] = (x[i] - ox[i]) / dt; vy[i] = (y[i] - oy[i]) / dt;
+			}
+			if (s === SUB - 1) viscosity();
+		}
+		// 바디 입자 위치 갱신
+		for (const B of bodies) {
+			if (!B.alive) continue;
+			for (const i of B.m) { pos(i, P0); x[i] = P0[0]; y[i] = P0[1]; }
+		}
+		if (wakeSpots.length) {
+			// 사라진 입자 주변의 쉬던 입자를 깨움 (받침이 없어졌을 수 있음)
+			const cellW = new Set();
+			for (let k = 0; k < wakeSpots.length; k += 2) cellW.add(((wakeSpots[k + 1] / 4) | 0) * 1000 + ((wakeSpots[k] / 4) | 0));
+			for (let i = 0; i < n; i++) if (zz[i]) { const cx = (x[i] / 4) | 0, cy = (y[i] / 4) | 0; if (cellW.has(cy * 1000 + cx) || cellW.has((cy + 1) * 1000 + cx) || cellW.has(cy * 1000 + cx - 1) || cellW.has(cy * 1000 + cx + 1)) { zz[i] = 0; calm[i] = 0; } }
+			wakeSpots.length = 0;
+		}
+		// 가루·액체 휴식: 오래 가만히 있으면 계산을 쉬고, 1초마다 한 번씩 깨어나 받침이 그대로인지 확인
+		for (let i = 0; i < n; i++) {
+			if (dead[i] || body[i] >= 0 || anch[i]) continue;
+			const c = cat[i];
+			if (c === CAT.GAS || fresh[i]) { zz[i] = 0; continue; }
+			if (zz[i]) { if ((i + frame) % 60 === 0) { zz[i] = 0; calm[i] = 30; rx0[i] = x[i]; ry0[i] = y[i]; } continue; }
+			let still;
+			if (c === CAT.LIQUID) {
+				// 액체: 기준 위치 근처에서 제자리 떨림만 하고 있는지 (떨림은 허용, 흐르면 기준 갱신)
+				const ddx = x[i] - rx0[i], ddy = y[i] - ry0[i];
+				still = calm[i] > 0 && ddx * ddx + ddy * ddy <= 0.16 && Math.abs(vx[i]) + Math.abs(vy[i]) < 0.9;
+				if (!still) { rx0[i] = x[i]; ry0[i] = y[i]; }
+			} else {
+				// 가루: 기준 위치 근처에 머물렀는지
+				const ddx = x[i] - rx0[i], ddy = y[i] - ry0[i];
+				still = calm[i] > 0 && ddx * ddx + ddy * ddy <= 0.09;
+				if (!still) { rx0[i] = x[i]; ry0[i] = y[i]; }
+			}
+			if (still) { if (calm[i] < 255) calm[i]++; } else calm[i] = 1;
+			if (calm[i] > 40) { zz[i] = 1; vx[i] = vy[i] = 0; }
+		}
+		fractures();
+		sleep();
+		if (needCompact) compact();
+		for (const f of flash) f.t++;
+		while (flash.length && flash[0].t > 14) flash.shift();
+	}
+
+	function fractures() {
+		let budget = 4;
+		const nb = bodies.length;
+		for (let b = 0; b < nb && budget > 0; b++) {
+			const B = bodies[b];
+			if (!B.alive) continue;
+			if (B.cool > 0) { B.cool--; B.impact = 0; continue; }
+			B.recent = B.recent * 0.5 + B.impact; B.impact = 0;
+			// 압력 파괴 (폭발)
+			if (B.pbreak >= 0 && !dead[B.pbreak] && body[B.pbreak] === b) { budget--; B.recent = 0; const nb0 = bodies.length; crack(b, B.pbreak, 1 + B.pbv * 2); B.pbreak = -1; for (const P of bodies) if (P.alive && P.cool > 0 && P.cool < 12) P.cool = 12; continue; }
+			if (B.stat || B.asleep) continue;
+			let weakest = 1e9, od = -1, origin = -1;
+			for (const i of B.m) {
+				weakest = Math.min(weakest, ELEMENTS[el[i]].str);
+				if (boundary[i] && corr[i] > od) { od = corr[i]; origin = i; }
+			}
+			const ratio = (B.recent / weakest) ** 2;
+			if (ratio > 1 && origin >= 0) { budget--; B.recent = 0; crack(b, origin, ratio); }
+		}
+		for (const B of bodies) if (B.alive) B.impact = 0;
+		corr.fill(0, 0, n);
+	}
+	function sleep() {
+		for (const B of bodies) {
+			if (!B.alive || B.stat || B.asleep) continue;
+			const sp = Math.hypot(B.vx, B.vy) + Math.abs(B.w) * B.rmax;
+			if (sp < 0.03) B.still++; else B.still = 0;
+			if (B.still > 20) { B.asleep = true; B.vx = B.vy = B.w = 0; }
+		}
+	}
+
+	function compact() {
+		const remap = new Int32Array(n); let k = 0;
+		for (let i = 0; i < n; i++) {
+			if (dead[i]) { remap[i] = -1; continue; }
+			remap[i] = k;
+			if (k !== i) {
+				x[k] = x[i]; y[k] = y[i]; vx[k] = vx[i]; vy[k] = vy[i]; ox[k] = ox[i]; oy[k] = oy[i];
+				el[k] = el[i]; cat[k] = cat[i]; shade[k] = shade[i]; temp[k] = temp[i]; life[k] = life[i]; burning[k] = burning[i];
+				body[k] = body[i]; bidx[k] = bidx[i]; gx[k] = gx[i]; gy[k] = gy[i]; boundary[k] = boundary[i]; anch[k] = anch[i];
+				fuse[k] = fuse[i]; corr[k] = corr[i]; pDens[k] = pDens[i]; pFr[k] = pFr[i];
+				ctype[k] = ctype[i]; fresh[k] = fresh[i]; freshAt[k] = freshAt[i]; zz[k] = zz[i]; calm[k] = calm[i]; rx0[k] = rx0[i]; ry0[k] = ry0[i];
+			}
+			dead[k] = 0; k++;
+		}
+		n = k;
+		// 바디 구성원 재매핑 (죽은 입자는 이미 split으로 빠져 있음)
+		for (let b = 0; b < bodies.length; b++) {
+			const B = bodies[b];
+			if (!B.alive) continue;
+			const m = [], qx = [], qy = [];
+			for (let j = 0; j < B.m.length; j++) { const r = remap[B.m[j]]; if (r >= 0) { m.push(r); qx.push(B.qx[j]); qy.push(B.qy[j]); } }
+			if (m.length < 2) { for (const i of m) body[i] = FREE; B.alive = false; continue; }
+			B.m = m; B.qx = Float32Array.from(qx); B.qy = Float32Array.from(qy);
+			B.occ = new Map();
+			m.forEach((i, j) => { bidx[i] = j; B.occ.set(lkey(gx[i], gy[i]), j); });
+		}
+		needCompact = false;
+	}
+
+	// ---------------- 외부 API ----------------
+	function addStroke(cells, e, occGrid) {
+		const mem = [];
+		for (const c of cells) {
+			const cx = c % W, cy = (c / W) | 0;
+			if (occGrid && occGrid[c]) continue;
+			const i = add(cx + 0.5, cy + 0.5, e);
+			if (i < 0) break;
+			gx[i] = cx; gy[i] = cy; mem.push(i);
+		}
+		const fixed = !!ELEMENTS[e].fixed;
+		for (const c of components(mem, null)) {
+			if (fixed) c.forEach(i => { anch[i] = 1; });
+			makeBody(c, fixed, c.map(() => 0), c.map(() => 0), 0);
+		}
+	}
+	function nearest(px, py, r) {
+		let best = -1, bd = r * r;
+		for (let i = 0; i < n; i++) {
+			if (dead[i] || cat[i] === CAT.GAS) continue;
+			const dx = x[i] - px, dy = y[i] - py, d = dx * dx + dy * dy;
+			if (d < bd) { bd = d; best = i; }
+		}
+		return best;
+	}
+	function toggleAnchor(px, py) {
+		const i = nearest(px, py, 2.5);
+		if (i < 0 || cat[i] === CAT.LIQUID) return null;
+		const b = body[i];
+		if (ELEMENTS[el[i]].fixed) return true;
+		if (b >= 0) {
+			const B = bodies[b];
+			if (B.stat) { for (const j of B.m) anch[j] = 0; B.stat = false; B.asleep = false; B.vx = B.vy = B.w = 0; return false; }
+			anch[i] = 1; B.stat = true; B.vx = B.vy = B.w = 0; return true;
+		}
+		anch[i] = anch[i] ? 0 : 1; vx[i] = vy[i] = 0;
+		return !!anch[i];
+	}
+	function erase(px, py, r) {
+		for (let i = 0; i < n; i++) {
+			if (dead[i]) continue;
+			const dx = x[i] - px, dy = y[i] - py;
+			if (zz[i] && dx * dx + dy * dy <= (r + 4) * (r + 4)) { zz[i] = 0; calm[i] = 0; }
+			if (dx * dx + dy * dy <= r * r) kill(i);
+		}
+		for (const b of dirty) { const B = bodies[b]; if (B && B.alive) split(b, null, null, null); }
+		dirty.clear();
+		compact();
+	}
+	// 잡기 도구: 강체의 잡은 지점을 손가락 쪽으로 끌어당김 (Box2D 마우스 조인트 방식)
+	let grabH = null;
+	function grab(px, py) {
+		let best = -1, bd = 3 * 3;
+		for (let i = 0; i < n; i++) {
+			if (dead[i] || cat[i] === CAT.GAS) continue;
+			pos(i, P0);
+			const dx = P0[0] - px, dy = P0[1] - py, d = dx * dx + dy * dy;
+			if (d < bd) { bd = d; best = i; }
+		}
+		if (best < 0) { grabH = { free: true, tx: px, ty: py }; return 'free'; }
+		const b = body[best];
+		if (b >= 0) {
+			const B = bodies[b];
+			if (B.stat) { grabH = null; return 'fixed'; }
+			wake(B);
+			const dx = px - B.cx, dy = py - B.cy;
+			grabH = { B, lx: B.co * dx + B.si * dy, ly: -B.si * dx + B.co * dy, tx: px, ty: py };
+			return 'body';
+		}
+		grabH = { free: true, tx: px, ty: py };
+		return 'free';
+	}
+	function dragTo(px, py) { if (grabH) { grabH.tx = px; grabH.ty = py; } }
+	function release() { grabH = null; }
+	function applyGrab() {
+		const h = grabH; if (!h) return;
+		if (h.free) {
+			// 가루·액체는 손가락 주변을 휘저음
+			for (let i = 0; i < n; i++) {
+				if (dead[i] || body[i] >= 0 || anch[i]) continue;
+				const dx = h.tx - x[i], dy = h.ty - y[i], d2 = dx * dx + dy * dy;
+				if (d2 > 25) continue;
+				zz[i] = 0; calm[i] = 0;
+				vx[i] += dx * 0.08; vy[i] += dy * 0.08;
+			}
+			return;
+		}
+		const B = h.B;
+		if (!B.alive) { grabH = null; return; }
+		wake(B); B.still = 0;
+		const rx = B.co * h.lx - B.si * h.ly, ry = B.si * h.lx + B.co * h.ly;
+		const px = B.cx + rx, py = B.cy + ry;
+		let dvx = (h.tx - px) * 0.35, dvy = (h.ty - py) * 0.35;
+		const dl = Math.hypot(dvx, dvy); if (dl > 8) { dvx *= 8 / dl; dvy *= 8 / dl; }
+		const vpx = B.vx - B.w * ry, vpy = B.vy + B.w * rx;
+		// K 행렬로 잡은 지점의 속도를 목표로 (회전도 자연스럽게)
+		const iM = 1 / B.M, iI = 1 / B.I;
+		const k11 = iM + ry * ry * iI, k12 = -rx * ry * iI, k22 = iM + rx * rx * iI;
+		const det = k11 * k22 - k12 * k12;
+		const ex = (dvx - vpx) * 0.6, ey = (dvy - vpy) * 0.6;
+		const jx = (k22 * ex - k12 * ey) / det, jy = (-k12 * ex + k11 * ey) / det;
+		B.vx += jx * iM; B.vy += jy * iM; B.w += (rx * jy - ry * jx) * iI;
+		B.w *= 0.85;
+	}
+	// 가열·냉각 도구
+	function heat(px, py, r, dT) {
+		for (let i = 0; i < n; i++) {
+			if (dead[i]) continue;
+			pos(i, P0);
+			const dx = P0[0] - px, dy = P0[1] - py;
+			if (dx * dx + dy * dy > r * r) continue;
+			temp[i] = Math.max(-273, Math.min(9000, temp[i] + dT));
+		}
+		const a = aIdx(px, py); hv[a] = Math.max(-273, Math.min(3000, hv[a] + dT * 0.5));
+	}
+	// 불붙이기 도구: 가연물은 불이 붙고 폭발물은 터짐, 나머지는 달궈짐
+	function ignite(px, py, r) {
+		let hit = 0;
+		for (let i = 0; i < n; i++) {
+			if (dead[i]) continue;
+			pos(i, P0);
+			const dx = P0[0] - px, dy = P0[1] - py;
+			if (dx * dx + dy * dy > r * r) continue;
+			const D = ELEMENTS[el[i]];
+			if (D.boom) { if (!fuse[i]) fuse[i] = el[i] === E.GUNP ? 2 : 1; hit++; }
+			else if (D.ignite) { temp[i] = Math.max(temp[i], D.ignite + 10); zz[i] = 0; hit++; }
+		}
+		if (!hit && n < CAP - 10 && rnd() < 0.6) { const f = add(px + (rnd() - 0.5) * r, py + (rnd() - 0.5) * r, E.FIRE, 900); if (f >= 0) vy[f] = -0.3; }
+	}
+	// 손가락 아래 정보 (재질, 온도, 압력)
+	function probe(px, py) {
+		let best = -1, bd = 2.2 * 2.2;
+		for (let i = 0; i < n; i++) {
+			if (dead[i]) continue;
+			pos(i, P0);
+			const dx = P0[0] - px, dy = P0[1] - py, d = dx * dx + dy * dy;
+			if (d < bd) { bd = d; best = i; }
+		}
+		const a = aIdx(px, py);
+		if (best < 0) return { name: 'Air', temp: hv[a], p: pv[a] };
+		return { name: ELEMENTS[el[best]].name + (burning[best] ? ' (burning)' : ''), temp: temp[best], p: pv[a] };
+	}
+	// ---- 되돌리기·저장용 스냅샷 ----
+	const PARR = () => ({ x, y, vx, vy, ox, oy, el, cat, shade, temp, life, burning, body, bidx, gx, gy, boundary, anch, dead, fuse, corr, pDens, pFr, ctype, fresh, freshAt, zz, calm, rx0, ry0 });
+	function snapshot() {
+		if (needCompact) compact();
+		const A = PARR(), P = {};
+		for (const k in A) P[k] = A[k].slice(0, n);
+		return {
+			n, P, pv: pv.slice(), avx: avx.slice(), avy: avy.slice(), hv: hv.slice(), G: gravity,
+			bodies: bodies.map(B => ({ ...B, m: B.m.slice(), qx: B.qx.slice(), qy: B.qy.slice(), occ: Array.from(B.occ) }))
+		};
+	}
+	function restore(S0) {
+		const A = PARR();
+		n = Math.min(S0.n, CAP);
+		for (const k in A) { A[k].fill(0); A[k].set(S0.P[k].subarray ? S0.P[k].subarray(0, n) : S0.P[k].slice(0, n)); }
+		pv.set(S0.pv); avx.set(S0.avx); avy.set(S0.avy); hv.set(S0.hv);
+		if (S0.G !== undefined) gravity = S0.G;
+		bodies.length = 0;
+		for (const b of S0.bodies) bodies.push({ ...b, m: Array.from(b.m), qx: Float32Array.from(b.qx), qy: Float32Array.from(b.qy), occ: new Map(b.occ) });
+		grabH = null; flash.length = 0; needCompact = false;
+	}
+	// 저장 문자열 (기기 안에 보관)
+	function b64(ta) { const u = new Uint8Array(ta.buffer, ta.byteOffset, ta.byteLength); let s0 = ''; for (let k = 0; k < u.length; k += 0x8000) s0 += String.fromCharCode.apply(null, u.subarray(k, k + 0x8000)); return btoa(s0); }
+	function unb64(str, Type) { const bin = atob(str), u = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k); return new Type(u.buffer); }
+	function serialize() {
+		const S0 = snapshot(), P = {};
+		for (const k in S0.P) P[k] = [S0.P[k].constructor.name, b64(S0.P[k])];
+		return JSON.stringify({ v: 1, W, H, n: S0.n, P, G: S0.G, hv: b64(S0.hv), bodies: S0.bodies.map(B => ({ ...B, qx: Array.from(B.qx), qy: Array.from(B.qy) })) });
+	}
+	function deserialize(str) {
+		const o = JSON.parse(str);
+		if (o.W !== W || o.H !== H) return false;
+		const T = { Float32Array, Uint8Array, Int8Array, Int16Array, Int32Array }, P = {};
+		for (const k in o.P) P[k] = unb64(o.P[k][1], T[o.P[k][0]]);
+		restore({ n: o.n, P, pv: new Float32Array(AN), avx: new Float32Array(AN), avy: new Float32Array(AN), hv: unb64(o.hv, Float32Array), G: o.G, bodies: o.bodies });
+		return true;
+	}
+	// 바람 도구: 문지른 방향으로 공기를 밂
+	function wind(px, py, dx, dy, r) {
+		const cx = px / AC, cy = py / AC, rr = Math.max(1.2, r / AC);
+		for (let yy = Math.floor(cy - rr); yy <= Math.ceil(cy + rr); yy++) for (let xx = Math.floor(cx - rr); xx <= Math.ceil(cx + rr); xx++) {
+			if (xx < 0 || yy < 0 || xx >= AW || yy >= AH) continue;
+			const d = Math.hypot(xx + 0.5 - cx, yy + 0.5 - cy); if (d > rr) continue;
+			const a = yy * AW + xx, k = 1 - d / rr;
+			avx[a] += dx * 0.6 * k; avy[a] += dy * 0.6 * k;
+		}
+		for (let i = 0; i < n; i++) if (zz[i] && Math.abs(x[i] - px) < r + 4 && Math.abs(y[i] - py) < r + 4) { zz[i] = 0; calm[i] = 0; }
+	}
+	// 흡입·밀어내기: 공기를 손가락 쪽으로 빨아들이거나 밀어냄
+	function pull(px, py, r, str) {
+		const cx = px / AC, cy = py / AC, rr = Math.max(1.5, r / AC);
+		for (let yy = Math.floor(cy - rr); yy <= Math.ceil(cy + rr); yy++) for (let xx = Math.floor(cx - rr); xx <= Math.ceil(cx + rr); xx++) {
+			if (xx < 0 || yy < 0 || xx >= AW || yy >= AH) continue;
+			const dx = xx + 0.5 - cx, dy = yy + 0.5 - cy, d = Math.hypot(dx, dy); if (d > rr || d < 0.3) continue;
+			const a = yy * AW + xx, k = (1 - d / rr) * str / d;
+			avx[a] -= dx * k; avy[a] -= dy * k;
+		}
+		const R2 = (r + 4) * (r + 4);
+		for (let i = 0; i < n; i++) if (zz[i] && (x[i] - px) ** 2 + (y[i] - py) ** 2 < R2) { zz[i] = 0; calm[i] = 0; }
+		for (const B of bodies) if (B && B.alive && B.asleep && (B.cx - px) ** 2 + (B.cy - py) ** 2 < R2 * 4) { B.asleep = false; B.still = 0; }
+	}
+	function clearGas() { for (let i = 0; i < n; i++) if (!dead[i] && cat[i] === CAT.GAS) kill(i); compact(); }
+	function resetAir() { pv.fill(0); avx.fill(0); avy.fill(0); hv.fill(AMB); }
+	function resetTemp() {
+		for (let i = 0; i < n; i++) { if (dead[i]) continue; const D = ELEMENTS[el[i]]; if (cat[i] === CAT.GAS && (el[i] === E.FIRE || el[i] === E.PLSM || el[i] === E.EMBR)) { kill(i); continue; } temp[i] = D.t0 !== undefined ? D.t0 : AMB; burning[i] = 0; }
+		hv.fill(AMB); compact();
+	}
+	// 스포이드: 손가락 아래 물질
+	function pick(px, py) {
+		let best = -1, bd = 2.5 * 2.5;
+		for (let i = 0; i < n; i++) {
+			if (dead[i]) continue;
+			pos(i, P0);
+			const dx = P0[0] - px, dy = P0[1] - py, d = dx * dx + dy * dy;
+			if (d < bd) { bd = d; best = i; }
+		}
+		return best < 0 || ELEMENTS[el[best]].hidden ? null : ELEMENTS[el[best]].key;
+	}
+	function clear() {
+		grabH = null;
+		n = 0; bodies.length = 0; pv.fill(0); avx.fill(0); avy.fill(0); hv.fill(AMB); flash.length = 0;
+	}
+
+	return {
+		W, H, AC, AW, AH, get n() { return n; }, x, y, vx, vy, el, cat, shade, temp, life, burning, body, anch, dead,
+		pv, avx, avy, hv, bodies, flash,
+		add, addStroke, toggleAnchor, erase, ignite, clear, step, compact, grab, dragTo, release, heat, probe, ctype,
+		snapshot, restore, serialize, deserialize, wind, pick, pull, clearGas, resetAir, resetTemp, get gravity() { return gravity; }, set gravity(v) { gravity = v; },
+		get frame() { return frame; }, get sub() { return lastSub; }, get iters() { return ITERS; }, set iters(v) { ITERS = v; },
+	};
+}
+
+// ============ 렌더러 (픽셀 버퍼에 그림) ============
+function createRenderer(world, S) {
+	const W = world.W, H = world.H, BW = W * S, BH = H * S;
+	const buf = new Uint32Array(BW * BH);
+	const lf = new Float32Array(BW * BH), lq = new Float32Array(BW * BH), lr = new Float32Array(BW * BH), lg = new Float32Array(BW * BH), lb = new Float32Array(BW * BH), la = new Float32Array(BW * BH);
+	const gr = new Float32Array(W * H), gg = new Float32Array(W * H), gb = new Float32Array(W * H), tmp = new Float32Array(W * H);
+	const occ = new Uint8Array(W * H);
+	const pack = (r, g, b) => (255 << 24) | (b << 16) | (g << 8) | r;
+	const shadeF = [0.9, 0.96, 1.02, 1.08];
+	const bg = new Uint32Array(BW * BH);
+	for (let yy = 0; yy < BH; yy++) {
+		const t = yy / BH;
+		for (let xx = 0; xx < BW; xx++) {
+			const vx0 = (xx / BW - 0.5), vy0 = (yy / BH - 0.5), vig = 1 - Math.min(0.45, (vx0 * vx0 + vy0 * vy0) * 0.9);
+			bg[yy * BW + xx] = pack(Math.round((10 + t * 5) * vig), Math.round((12 + t * 6) * vig), Math.round((17 + t * 10) * vig));
+		}
+	}
+	// 빛 번짐: 빛이 있는 영역(bbox)만 흐리게
+	let gx0 = W, gx1 = -1, gy0 = H, gy1 = -1, pgx0 = 0, pgx1 = W - 1, pgy0 = 0, pgy1 = H - 1;
+	function glowAdd(gi, r, g, b) {
+		gr[gi] += r; gg[gi] += g; gb[gi] += b;
+		const yy = (gi / W) | 0, xx = gi - yy * W;
+		if (xx < gx0) gx0 = xx; if (xx > gx1) gx1 = xx; if (yy < gy0) gy0 = yy; if (yy > gy1) gy1 = yy;
+	}
+	function blurPass(src, dst, horiz, x0, x1, y0, y1) {
+		for (let yy = y0; yy <= y1; yy++) {
+			const row = yy * W;
+			for (let xx = x0; xx <= x1; xx++) {
+				let s0 = src[row + xx] * 2, c = 2;
+				if (horiz) {
+					if (xx > 0) { s0 += src[row + xx - 1] * 1.5; c += 1.5; } if (xx < W - 1) { s0 += src[row + xx + 1] * 1.5; c += 1.5; }
+					if (xx > 1) { s0 += src[row + xx - 2]; c += 1; } if (xx < W - 2) { s0 += src[row + xx + 2]; c += 1; }
+				} else {
+					if (yy > 0) { s0 += src[row - W + xx] * 1.5; c += 1.5; } if (yy < H - 1) { s0 += src[row + W + xx] * 1.5; c += 1.5; }
+					if (yy > 1) { s0 += src[row - 2 * W + xx]; c += 1; } if (yy < H - 2) { s0 += src[row + 2 * W + xx]; c += 1; }
+				}
+				dst[row + xx] = s0 / c;
+			}
+		}
+	}
+	function blur(a, x0, x1, y0, y1) {
+		for (let yy = y0; yy <= y1; yy++) tmp.fill(0, yy * W + x0, yy * W + x1 + 1);
+		blurPass(a, tmp, true, x0, x1, y0, y1); blurPass(tmp, a, false, x0, x1, y0, y1);
+	}
+	let lx0 = BW, lx1 = -1, ly0 = BH, ly1 = -1, plx0 = 0, plx1 = BW - 1, ply0 = 0, ply1 = BH - 1;
+
+	// 불티 색 (0~255 색상환)
+	const HUE = [];
+	for (let h = 0; h < 256; h++) {
+		const a = h / 256 * 6, k = a | 0, f = a - k, q = 1 - f;
+		const c = [[1, f, 0], [q, 1, 0], [0, 1, f], [0, q, 1], [f, 0, 1], [1, 0, q]][k];
+		HUE.push([0.45 + 0.55 * c[0], 0.45 + 0.55 * c[1], 0.45 + 0.55 * c[2]]);
+	}
+	function heatColor(t) {
+		// 달궈진 물체 색 (붉은빛 → 주황 → 노랑)
+		if (t < 450) return null;
+		const k = Math.min(1, (t - 450) / 1100);
+		return [0.6 + 0.4 * k, 0.12 + 0.7 * k * k, 0.02 + 0.3 * k * k * k, k];
+	}
+
+	// 온도 → 색 (파우더토이 온도 보기처럼: 차가움 파랑 → 상온 어둠 → 뜨거움 빨강·노랑·흰색)
+	function tempColor(t) {
+		if (t < AMB) { const k = Math.min(1, (AMB - t) / 220); return [20 + 40 * k, 30 + 90 * k, 60 + 195 * k]; }
+		const k = Math.min(1, (t - AMB) / 1600);
+		if (k < 0.33) { const u = k / 0.33; return [40 + 200 * u, 30 + 20 * u, 40 - 20 * u]; }
+		if (k < 0.66) { const u = (k - 0.33) / 0.33; return [240, 50 + 170 * u, 20]; }
+		const u = (k - 0.66) / 0.34; return [240 + 15 * u, 220 + 35 * u, 20 + 235 * u];
+	}
+	function render(time, view) {
+		const showAir = view === 1, showHeat = view === 2;
+		const w = world, n = w.n;
+		buf.set(bg);
+		for (let yy = ply0; yy <= ply1; yy++) { const a0 = yy * BW + plx0, a1 = yy * BW + plx1 + 1; lq.fill(0, a0, a1); lf.fill(0, a0, a1); lr.fill(0, a0, a1); lg.fill(0, a0, a1); lb.fill(0, a0, a1); la.fill(0, a0, a1); }
+		for (let yy = pgy0; yy <= pgy1; yy++) { const a0 = yy * W + pgx0, a1 = yy * W + pgx1 + 1; gr.fill(0, a0, a1); gg.fill(0, a0, a1); gb.fill(0, a0, a1); }
+		lx0 = BW; lx1 = -1; ly0 = BH; ly1 = -1; gx0 = W; gx1 = -1; gy0 = H; gy1 = -1;
+		const X = w.x, Y = w.y, EL = w.el, CT = w.cat;
+		// 0) 고체·가루 점유 (가장자리 명암용)
+		occ.fill(0);
+		for (let i = 0; i < n; i++) {
+			if (w.dead[i]) continue;
+			const c = CT[i];
+			if (c === CAT.LIQUID || c === CAT.GAS) continue;
+			const qx = Math.round(X[i]), qy = Math.round(Y[i]);
+			if (qx >= 0 && qy >= 0 && qx < W && qy < H) occ[qy * W + qx] = 1;
+		}
+		// 1) 고체·가루
+		for (let i = 0; i < n; i++) {
+			if (w.dead[i]) continue;
+			const c = CT[i];
+			if (c === CAT.LIQUID || c === CAT.GAS) continue;
+			const D = ELEMENTS[EL[i]];
+			let f = shadeF[w.shade[i]];
+			if (w.anch[i] && !D.fixed && (Math.round(X[i]) + Math.round(Y[i])) % 3 === 0) f *= 0.6;
+			let r = D.rgb[0] * f, g = D.rgb[1] * f, b = D.rgb[2] * f;
+			const t = w.temp[i];
+			if (D.sponge && w.life[i] > 0) { const k = Math.min(1, w.life[i] / 40); r *= 1 - 0.45 * k; g *= 1 - 0.35 * k; b *= 1 - 0.1 * k; } // 물 먹은 스펀지는 어둡게
+			if (D.selfHeat && (i & 3) === 0) { const gi = Math.round(Y[i]) * W + Math.round(X[i]); if (gi >= 0 && gi < W * H) glowAdd(gi, 0.02, 0.1, 0.02); } // 우라늄 은은한 빛
+			if (w.burning[i]) {
+				const fl = 0.5 + 0.5 * Math.sin(time * 0.02 + i * 1.7);
+				r = r * 0.35 + 90 + 60 * fl; g = g * 0.3 + 30 * fl; b *= 0.2;
+				const gi = Math.round(Y[i]) * W + Math.round(X[i]);
+				if (gi >= 0 && gi < W * H) { glowAdd(gi, 0.5, 0.18, 0.03); }
+			} else {
+				const hc = heatColor(t);
+				if (hc) {
+					r = r * (1 - hc[3]) + 255 * hc[0] * hc[3]; g = g * (1 - hc[3]) + 255 * hc[1] * hc[3]; b = b * (1 - hc[3]) + 255 * hc[2] * hc[3];
+					const gi = Math.round(Y[i]) * W + Math.round(X[i]);
+					if (gi >= 0 && gi < W * H) { glowAdd(gi, hc[0] * hc[3] * 0.5, hc[1] * hc[3] * 0.4, hc[2] * hc[3] * 0.3); }
+				}
+			}
+			if (showHeat) { const tc = tempColor(t); r = tc[0] * f; g = tc[1] * f; b = tc[2] * f; }
+			// 가장자리 명암: 위가 비면 밝게(빛), 아래가 비면 어둡게(그림자)
+			const qx = Math.round(X[i]), qy = Math.round(Y[i]);
+			const topOpen = qy > 0 && !occ[(qy - 1) * W + qx], botOpen = qy < H - 1 && !occ[(qy + 1) * W + qx];
+			const leftOpen = qx > 0 && !occ[qy * W + qx - 1];
+			const lite = topOpen ? 1.22 : leftOpen ? 1.08 : 1, dark = botOpen ? 0.78 : 1;
+			let spec = 1;
+			if (!showHeat) {
+				if (D.metal) spec = 0.9 + 0.2 * Math.sin((qx + qy) * 0.45 + Math.sin(qy * 0.3) * 0.8); // 금속 결
+				if ((D.gloss || D.clear) && (qx * 2 + qy * 3) % 13 < 2) spec = 1.45; // 유리·흑요석 반짝임 줄
+			}
+			r *= spec; g *= spec; b *= spec;
+			const colT = pack(Math.min(255, r * lite) | 0, Math.min(255, g * lite) | 0, Math.min(255, b * lite) | 0);
+			const colB = pack(Math.min(255, r * dark) | 0, Math.min(255, g * dark) | 0, Math.min(255, b * dark) | 0);
+			const bi = w.body[i];
+			const big = bi >= 0 && Math.abs(Math.sin(w.bodies[bi].th * 2)) > 0.05 ? 1 : 0; // 기울어진 강체는 빈틈 없게
+			const bx = Math.round(X[i] * S - S / 2 - big * 0.5), by = Math.round(Y[i] * S - S / 2 - big * 0.5);
+			const clr = !showHeat && D.clear ? D.clear : 0;
+			for (let yy = by; yy < by + S + big; yy++) {
+				if (yy < 0 || yy >= BH) continue;
+				const row = yy * BW, col = yy === by ? colT : yy === by + S + big - 1 ? colB : colT;
+				for (let xx = bx; xx < bx + S + big; xx++) {
+					if (xx < 0 || xx >= BW) continue;
+					if (clr) { // 유리·얼음·다이아: 뒤가 비쳐 보임
+						const u = buf[row + xx], k = yy === by && topOpen ? 0.15 : clr;
+						buf[row + xx] = pack(((u & 255) * k + (col & 255) * (1 - k)) | 0, (((u >> 8) & 255) * k + ((col >> 8) & 255) * (1 - k)) | 0, (((u >> 16) & 255) * k + ((col >> 16) & 255) * (1 - k)) | 0);
+					} else buf[row + xx] = col;
+				}
+			}
+		}
+		// 2) 액체: 밀도장 → 부드러운 수면 + 반사광
+		for (let i = 0; i < n; i++) {
+			if (w.dead[i] || CT[i] !== CAT.LIQUID) continue;
+			const D = ELEMENTS[EL[i]];
+			let cr = D.rgb[0], cg = D.rgb[1], cb = D.rgb[2];
+			const tl = w.temp[i];
+			if (EL[i] === E.LAVA) {
+				const k = Math.max(0, Math.min(1, (tl - 700) / 900)), fl = 0.85 + 0.15 * Math.sin(time * 0.004 + i);
+				cr = 120 + 135 * k * fl; cg = 20 + 150 * k * k * fl; cb = 10 + 40 * k * k * k;
+				const gi = Math.round(Y[i]) * W + Math.round(X[i]);
+				if (gi >= 0 && gi < W * H) { glowAdd(gi, 0.22 * k, 0.08 * k * k, 0.01); }
+			}
+			else if (D.glowLiq) {
+				const fl = 0.8 + 0.2 * Math.sin(time * 0.003 + i * 0.7);
+				cr *= fl; cg *= fl; cb *= fl;
+				if ((i & 1) === 0) { const gi = Math.round(Y[i]) * W + Math.round(X[i]); if (gi >= 0 && gi < W * H) glowAdd(gi, 0.1 * fl, 0.42 * fl, 0.17 * fl); }
+			}
+			if (showHeat) { const tc = tempColor(tl); cr = tc[0]; cg = tc[1]; cb = tc[2]; }
+			const cx = X[i] * S, cy = Y[i] * S, rad = S * 1.25;
+			const x0 = Math.max(0, Math.floor(cx - rad)), x1 = Math.min(BW - 1, Math.ceil(cx + rad));
+			const y0 = Math.max(0, Math.floor(cy - rad)), y1 = Math.min(BH - 1, Math.ceil(cy + rad));
+			const hot = Math.min(1, Math.max(0, (w.temp[i] - 40) / 60));
+			const spd = EL[i] === E.WATR || EL[i] === E.SLTW ? Math.min(1, Math.max(0, (Math.abs(w.vx[i]) + Math.abs(w.vy[i]) - 0.8) / 2)) : 0;
+			if (x0 < lx0) lx0 = x0; if (x1 > lx1) lx1 = x1; if (y0 < ly0) ly0 = y0; if (y1 > ly1) ly1 = y1;
+			for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) {
+				const dx = (xx + 0.5 - cx) / rad, dy = (yy + 0.5 - cy) / rad, d2 = dx * dx + dy * dy;
+				if (d2 >= 1) continue;
+				const wgt = (1 - d2) * (1 - d2);
+				const p = yy * BW + xx;
+				lq[p] += wgt; lr[p] += cr * wgt * (1 + hot * 0.3); lg[p] += cg * wgt; lb[p] += cb * wgt; la[p] += (showHeat ? 1 : D.alpha) * wgt; lf[p] += spd * wgt;
+			}
+		}
+		const TH = 0.42;
+		plx0 = Math.max(0, lx0); plx1 = Math.min(BW - 1, lx1); ply0 = Math.max(0, ly0); ply1 = Math.min(BH - 1, ly1);
+		for (let yy = ply0; yy <= ply1; yy++) {
+			const row = yy * BW;
+			for (let xx = plx0; xx <= plx1; xx++) {
+				const p = row + xx, d = lq[p];
+				if (d < TH) continue;
+				let r = lr[p] / d, g = lg[p] / d, b = lb[p] / d, a = la[p] / d;
+				// 깊을수록 조금 진하게, 수면 근처는 밝게
+				const up = yy > 0 ? lq[p - BW] : 0;
+				const surf = up < TH ? 1 : 0;
+				const depth = Math.min(1, (d - TH) / 2.2);
+				const k = 1.08 - depth * 0.28;
+				r *= k; g *= k; b *= k;
+				const sh = 0.5 + 0.5 * Math.sin(xx * 0.35 + yy * 0.12 + time * 0.004);
+				r += 14 * sh; g += 18 * sh; b += 22 * sh;
+				const foam = lf[p] / d; if (foam > 0.05) { const fk = Math.min(0.8, foam); r += (235 - r) * fk; g += (245 - g) * fk; b += (255 - b) * fk; a = Math.min(1, a + fk * 0.3); }
+				if (surf) { r = r * 0.6 + 95; g = g * 0.6 + 110; b = b * 0.6 + 120; a = Math.min(1, a + 0.12); }
+				else if (d < TH * 1.3) { r += 16; g += 20; b += 26; }
+				const under = buf[p];
+				const ur = under & 255, ug = (under >> 8) & 255, ub = (under >> 16) & 255;
+				buf[p] = pack(Math.min(255, ur * (1 - a) + r * a) | 0, Math.min(255, ug * (1 - a) + g * a) | 0, Math.min(255, ub * (1 - a) + b * a) | 0);
+			}
+		}
+		// 3) 기체: 연기·수증기 (반투명), 불 (빛)
+		for (let i = 0; i < n; i++) {
+			if (w.dead[i] || CT[i] !== CAT.GAS) continue;
+			const e = EL[i];
+			const qx = Math.round(X[i]), qy = Math.round(Y[i]);
+			if (e === E.FIRE || e === E.PLSM) {
+				const L = w.life[i], t = w.temp[i];
+				const k = Math.min(1, t / 1400);
+				// 불: 뜨거울수록 흰 노랑 → 주황 → 빨강 / 플라즈마: 보라·흰색
+				let r = 1, g = 0.25 + 0.7 * k, b = 0.05 + 0.5 * k * k * k;
+				if (e === E.PLSM) { r = 0.85; g = 0.55; b = 1; }
+				const inten = Math.min(1, L / 25) * (0.55 + 0.6 * k);
+				if (qx >= 0 && qy >= 0 && qx < W && qy < H) { const gi = qy * W + qx; glowAdd(gi, r * inten, g * inten, b * inten); }
+				const fx = X[i] * S, fy = Y[i] * S;
+				const bx = Math.round(fx) - 2, by = Math.round(fy) - 2;
+				for (let yy = by; yy < by + 5; yy++) for (let xx = bx; xx < bx + 5; xx++) {
+					if (xx < 0 || yy < 0 || xx >= BW || yy >= BH) continue;
+					const dd = ((xx + 0.5 - fx) ** 2 + (yy + 0.5 - fy) ** 2) / 5.5;
+					if (dd >= 1) continue;
+					const wv = (1 - dd) * inten;
+					const p = yy * BW + xx, u = buf[p];
+					const ur = u & 255, ug = (u >> 8) & 255, ub = (u >> 16) & 255;
+					buf[p] = pack(Math.min(255, ur + 200 * r * wv) | 0, Math.min(255, ug + 170 * g * wv) | 0, Math.min(255, ub + 140 * b * wv) | 0);
+				}
+				continue;
+			}
+			if (e === E.EMBR) {
+				// 불티: 색색 반짝이 + 빛 번짐
+				const hc = HUE[w.ctype[i]], L = Math.min(1, w.life[i] / 30), tw = 0.7 + 0.3 * Math.sin(time * 0.05 + i * 2.3);
+				const inten = L * tw;
+				if (qx >= 0 && qy >= 0 && qx < W && qy < H) glowAdd(qy * W + qx, hc[0] * inten * 0.7, hc[1] * inten * 0.7, hc[2] * inten * 0.7);
+				const fx = X[i] * S, fy = Y[i] * S, bx = Math.round(fx) - 1, by = Math.round(fy) - 1;
+				for (let yy = by; yy < by + 3; yy++) for (let xx = bx; xx < bx + 3; xx++) {
+					if (xx < 0 || yy < 0 || xx >= BW || yy >= BH) continue;
+					const c = (xx === bx + 1 && yy === by + 1) ? 1 : (xx === bx + 1 || yy === by + 1) ? 0.55 : 0.15;
+					const wv = c * inten, p = yy * BW + xx, u = buf[p];
+					buf[p] = pack(Math.min(255, (u & 255) + 255 * hc[0] * wv) | 0, Math.min(255, ((u >> 8) & 255) + 255 * hc[1] * wv) | 0, Math.min(255, ((u >> 16) & 255) + 255 * hc[2] * wv) | 0);
+				}
+				continue;
+			}
+			const D = ELEMENTS[e];
+			const fade = Math.min(1, w.life[i] / 80);
+			const a = (e === E.STEM ? 0.26 : e === E.GAS ? 0.22 : e === E.NGAS ? 0.18 : e === E.SMKE ? 0.34 : 0.3) * fade;
+			const gc = showHeat ? tempColor(w.temp[i]) : D.rgb;
+			// 기체: 부드러운 원형 뭉게 (가운데 진하고 가장자리 흐림)
+			const fx = X[i] * S, fy = Y[i] * S, R = S * 1.6, R2 = R * R;
+			const x0 = Math.max(0, Math.floor(fx - R)), x1 = Math.min(BW - 1, Math.ceil(fx + R));
+			const y0 = Math.max(0, Math.floor(fy - R)), y1 = Math.min(BH - 1, Math.ceil(fy + R));
+			for (let yy = y0; yy <= y1; yy++) {
+				const dy = yy + 0.5 - fy, dy2 = dy * dy;
+				for (let xx = x0; xx <= x1; xx++) {
+					const dx = xx + 0.5 - fx, d2 = dx * dx + dy2;
+					if (d2 >= R2) continue;
+					const q = 1 - d2 / R2, aa = a * q * q;
+					const p = yy * BW + xx, u = buf[p];
+					buf[p] = pack(((u & 255) * (1 - aa) + gc[0] * aa) | 0, (((u >> 8) & 255) * (1 - aa) + gc[1] * aa) | 0, (((u >> 16) & 255) * (1 - aa) + gc[2] * aa) | 0);
+				}
+			}
+		}
+		// 폭발 섬광
+		for (const f of w.flash) {
+			const k = Math.max(0, 1 - f.t / 14), rr = f.r * (0.6 + f.t * 0.12);
+			const x0 = Math.max(0, Math.floor(f.x - rr)), x1 = Math.min(W - 1, Math.ceil(f.x + rr));
+			const y0 = Math.max(0, Math.floor(f.y - rr)), y1 = Math.min(H - 1, Math.ceil(f.y + rr));
+			for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) {
+				const d = Math.hypot(xx - f.x, yy - f.y) / rr;
+				if (d >= 1) continue;
+				const v = (1 - d) * k * 1.6, gi = yy * W + xx;
+				glowAdd(gi, v, v * 0.75, v * 0.4);
+			}
+			// 충격파 고리
+			if (f.r > 5 && f.t < 12) {
+				const R = f.r * (0.8 + f.t * 0.45), kk = (1 - f.t / 12) * 0.35, steps = Math.ceil(R * 6.3);
+				for (let q = 0; q < steps; q++) {
+					const an = q / steps * Math.PI * 2, xx = Math.round(f.x + Math.cos(an) * R), yy = Math.round(f.y + Math.sin(an) * R);
+					if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+					glowAdd(yy * W + xx, kk * 0.8, kk * 0.9, kk);
+				}
+			}
+		}
+		// 4) 빛 번짐 (블룸)
+		if (gx1 >= 0) {
+			pgx0 = Math.max(0, gx0 - 5); pgx1 = Math.min(W - 1, gx1 + 5); pgy0 = Math.max(0, gy0 - 5); pgy1 = Math.min(H - 1, gy1 + 5);
+		} else { pgx0 = 0; pgx1 = -1; pgy0 = 0; pgy1 = -1; }
+		if (pgx1 >= 0) { for (let rep = 0; rep < 2; rep++) { blur(gr, pgx0, pgx1, pgy0, pgy1); blur(gg, pgx0, pgx1, pgy0, pgy1); blur(gb, pgx0, pgx1, pgy0, pgy1); } }
+		for (let yy = pgy0 * S; yy <= (pgy1 + 1) * S - 1 && pgx1 >= 0; yy++) {
+			const gyy = Math.min(H - 1, (yy / S) | 0);
+			for (let xx = pgx0 * S; xx <= (pgx1 + 1) * S - 1; xx++) {
+				const gi = gyy * W + Math.min(W - 1, (xx / S) | 0);
+				const R0 = gr[gi], G0 = gg[gi], B0 = gb[gi];
+				if (R0 + G0 + B0 < 0.004) continue;
+				const p = yy * BW + xx, u = buf[p];
+				buf[p] = pack(Math.min(255, (u & 255) + 255 * (1 - Math.exp(-R0 * 1.3))) | 0, Math.min(255, ((u >> 8) & 255) + 255 * (1 - Math.exp(-G0 * 1.3))) | 0, Math.min(255, ((u >> 16) & 255) + 255 * (1 - Math.exp(-B0 * 1.3))) | 0);
+			}
+		}
+		// 온도 보기: 공기 온도도 은은하게 (칸 단위로 한 번만 색 계산)
+		if (showHeat) {
+			const AC = w.AC, AW = w.AW, AH = w.AH, cs = AC * S;
+			for (let cy = 0; cy < AH; cy++) for (let cx = 0; cx < AW; cx++) {
+				const h = w.hv[cy * AW + cx];
+				if (Math.abs(h - AMB) < 15) continue;
+				const tc = tempColor(h), ar = tc[0] * 0.25, ag = tc[1] * 0.25, ab = tc[2] * 0.25;
+				for (let yy = cy * cs; yy < Math.min(BH, (cy + 1) * cs); yy++) for (let xx = cx * cs; xx < Math.min(BW, (cx + 1) * cs); xx++) {
+					const q = yy * BW + xx, u = buf[q];
+					buf[q] = pack(Math.min(255, (u & 255) + ar) | 0, Math.min(255, ((u >> 8) & 255) + ag) | 0, Math.min(255, ((u >> 16) & 255) + ab) | 0);
+				}
+			}
+		}
+		// 5) 공기 보기 (파우더토이식): 압력 빨강(+)/파랑(-), 바람 세기 초록, 부드럽게 보간
+		if (showAir) {
+			const AC = w.AC, AW = w.AW, AH = w.AH, PV = w.pv, VX = w.avx, VY = w.avy;
+			for (let yy = 0; yy < BH; yy++) {
+				let fy = yy / S / AC - 0.5; if (fy < 0) fy = 0; if (fy > AH - 1.001) fy = AH - 1.001;
+				const iy = fy | 0, ty = fy - iy;
+				for (let xx = 0; xx < BW; xx++) {
+					let fx = xx / S / AC - 0.5; if (fx < 0) fx = 0; if (fx > AW - 1.001) fx = AW - 1.001;
+					const ix = fx | 0, tx = fx - ix, a0 = iy * AW + ix;
+					const w00 = (1 - tx) * (1 - ty), w10 = tx * (1 - ty), w01 = (1 - tx) * ty, w11 = tx * ty;
+					const pr = PV[a0] * w00 + PV[a0 + 1] * w10 + PV[a0 + AW] * w01 + PV[a0 + AW + 1] * w11;
+					const vxv = VX[a0] * w00 + VX[a0 + 1] * w10 + VX[a0 + AW] * w01 + VX[a0 + AW + 1] * w11;
+					const vyv = VY[a0] * w00 + VY[a0 + 1] * w10 + VY[a0 + AW] * w01 + VY[a0 + AW + 1] * w11;
+					const r = Math.max(0, Math.min(1, pr / 6)), bl = Math.max(0, Math.min(1, -pr / 6));
+					const g = Math.min(1, Math.hypot(vxv, vyv) / 10) * 0.8;
+					const m = Math.max(r, bl, g);
+					if (m < 0.02) continue;
+					const q = yy * BW + xx, u = buf[q], keep = 1 - m * 0.4;
+					buf[q] = pack(Math.min(255, (u & 255) * keep + r * 235) | 0, Math.min(255, ((u >> 8) & 255) * keep + g * 150) | 0, Math.min(255, ((u >> 16) & 255) * keep + bl * 245) | 0);
+				}
+			}
+		}
+		return buf;
+	}
+	return { render, buf, BW, BH };
+}
+
+
+
+// ============ 시뮬레이션 호스트: 워커 안(또는 메인 스레드)에서 월드를 돌리고 그림 ============
+function startHost(canvas, post) {
+	const W = 320, H = 180;
+	const world = createWorld(W, H, 16000);
+	const S = 2;
+	const rend = createRenderer(world, S);
+	const off = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(rend.BW, rend.BH) : Object.assign(document.createElement('canvas'), { width: rend.BW, height: rend.BH });
+	const octx = off.getContext('2d');
+	const img = octx.createImageData(rend.BW, rend.BH);
+	const img32 = new Uint32Array(img.data.buffer);
+	const ctx = canvas.getContext('2d');
+	const toast = msg => post({ t: 'toast', msg });
+
+	// ---- 상태 ----
+	let cur = 'IRON', size = 3, shape = 0; // 0 자유, 1 선, 2 사각형, 3 원
+	let paused = false, view = 0, speed = 1, stepOnce = false;
+	let down = false, lastC = null, startC = null, ptr = null, hover = null, pending = null;
+	const undo = [];
+	const TOOLK = { GRAB: 1, ERAS: 1, ANCH: 1, HEAT: 1, COOL: 1, WIND: 1, PICK: 1, IGNT: 1, PULL: 1, PUSH: 1 };
+	let mirror = false; // 좌우 대칭 그리기
+	const occ = new Uint8Array(W * H);
+	function isSolid(k) { return !TOOLK[k] && ELEMENTS[E[k]].cat === CAT.SOLID; }
+	function pushUndo() { try { undo.push(world.snapshot()); if (undo.length > 8) undo.shift(); } catch (e) { } }
+
+	// ---- 붓 ----
+	function brushCells(c, into) {
+		const r = size - 0.5, cx = Math.floor(c.x), cy = Math.floor(c.y), R = Math.ceil(r);
+		for (let yy = cy - R; yy <= cy + R; yy++) for (let xx = cx - R; xx <= cx + R; xx++) {
+			if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+			if ((xx - cx) ** 2 + (yy - cy) ** 2 <= r * r + 0.3) { into.add(yy * W + xx); if (mirror) into.add(yy * W + (W - 1 - xx)); }
+		}
+	}
+	const mir = c => ({ x: W - c.x, y: c.y });
+	function both(c, fn) { fn(c); if (mirror) fn(mir(c)); }
+	function lineTo(a, b, fn) { const d = Math.hypot(b.x - a.x, b.y - a.y), st = Math.max(1, Math.ceil(d / 0.5)); for (let k = 0; k <= st; k++) fn({ x: a.x + (b.x - a.x) * k / st, y: a.y + (b.y - a.y) * k / st }); }
+	function shapeCells(a, b) {
+		const set = new Set();
+		if (shape === 1) lineTo(a, b, p => brushCells(p, set));
+		else if (shape === 2) {
+			const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x))), x1 = Math.min(W - 1, Math.floor(Math.max(a.x, b.x)));
+			const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y))), y1 = Math.min(H - 1, Math.floor(Math.max(a.y, b.y)));
+			for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { set.add(y * W + x); if (mirror) set.add(y * W + W - 1 - x); }
+		} else if (shape === 3) {
+			const r = Math.max(0.6, Math.hypot(b.x - a.x, b.y - a.y)), cx = a.x, cy = a.y;
+			for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(H - 1, Math.ceil(cy + r)); y++)
+				for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(W - 1, Math.ceil(cx + r)); x++)
+					if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r * r) { set.add(y * W + x); if (mirror) set.add(y * W + W - 1 - x); }
+		}
+		return set;
+	}
+	function refreshOcc() {
+		occ.fill(0);
+		for (let i = 0; i < world.n; i++) { if (world.dead[i] || world.cat[i] === CAT.GAS) continue; const qx = world.x[i] | 0, qy = world.y[i] | 0; if (qx >= 0 && qy >= 0 && qx < W && qy < H) occ[qy * W + qx] = 1; }
+	}
+	function fillCells(set, e, prob) {
+		refreshOcc();
+		const c = ELEMENTS[e].cat;
+		for (const k of set) {
+			if ((c !== CAT.GAS && occ[k]) || Math.random() > prob) continue;
+			const i = world.add(k % W + 0.3 + Math.random() * 0.4, ((k / W) | 0) + 0.3 + Math.random() * 0.4, e);
+			if (i < 0) { toast('Particle limit reached'); break; }
+			occ[k] = 1;
+		}
+	}
+	function spawnFlow() {
+		if (!down || !ptr) return;
+		if (cur === 'HEAT' || cur === 'COOL') { both(ptr, p => world.heat(p.x, p.y, size + 0.5, cur === 'HEAT' ? 25 : -25)); return; }
+		if (cur === 'IGNT') { both(ptr, p => world.ignite(p.x, p.y, size + 0.5)); return; }
+		if (cur === 'PULL' || cur === 'PUSH') { both(ptr, p => world.pull(p.x, p.y, size * 2 + 6, cur === 'PULL' ? 1.2 : -1.2)); return; }
+		if (TOOLK[cur] || isSolid(cur) || shape) return;
+		const e = E[cur], c = ELEMENTS[e].cat;
+		const set = new Set(); brushCells(ptr, set);
+		fillCells(set, e, c === CAT.GAS ? 0.35 : c === CAT.LIQUID ? 0.5 : 0.3);
+	}
+
+	// ---- 입력 ----
+	function onDown(c) {
+		down = true; lastC = startC = ptr = c;
+		if (cur === 'PICK') { const k = world.pick(c.x, c.y); if (k) { cur = k; post({ t: 'picked', key: k }); } return; }
+		if (!TOOLK[cur] || cur === 'ERAS' || cur === 'ANCH') pushUndo();
+		if (isSolid(cur)) { pending = new Set(); if (!shape) brushCells(c, pending); }
+		else if (cur === 'ANCH') { const r = world.toggleAnchor(c.x, c.y); toast(r === true ? 'Pinned' : r === false ? 'Unpinned' : 'Tap a solid or powder'); }
+		else if (cur === 'ERAS') both(c, p => world.erase(p.x, p.y, size + 0.5));
+		else if (cur === 'GRAB') { const r = world.grab(c.x, c.y); if (r === 'fixed') toast('Pinned objects cannot be grabbed'); }
+	}
+	function onMove(c) {
+		hover = c;
+		if (!down) return;
+		ptr = c;
+		if (pending && !shape) lineTo(lastC, c, p => brushCells(p, pending));
+		else if (pending && shape) pending = shapeCells(startC, c);
+		else if (cur === 'ERAS') { lineTo(lastC, c, p => world.erase(p.x, p.y, size + 0.5)); if (mirror) lineTo(mir(lastC), mir(c), p => world.erase(p.x, p.y, size + 0.5)); }
+		else if (cur === 'GRAB') world.dragTo(c.x, c.y);
+		else if (cur === 'WIND') { world.wind(c.x, c.y, c.x - lastC.x, c.y - lastC.y, size + 2); if (mirror) world.wind(W - c.x, c.y, lastC.x - c.x, c.y - lastC.y, size + 2); }
+		lastC = c;
+	}
+	function onUp() {
+		if (!down) return;
+		down = false; world.release();
+		if (pending && pending.size) { refreshOcc(); world.addStroke(pending, E[cur], occ); }
+		else if (shape && !TOOLK[cur] && !isSolid(cur) && startC && lastC) {
+			const e = E[cur];
+			fillCells(shapeCells(startC, lastC), e, ELEMENTS[e].cat === CAT.GAS ? 0.5 : 0.9);
+		}
+		pending = null;
+	}
+
+	// ---- 예시 장면 ----
+	function rect(x0, y0, w, h) { const s = new Set(); for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (x >= 0 && y >= 0 && x < W && y < H) s.add(y * W + x); return s; }
+	function demo() {
+		world.addStroke(rect(8, 70, 90, 3), E.WALL);
+		world.addStroke(rect(14, 58, 12, 12), E.WOOD);
+		world.addStroke(rect(40, 50, 3, 20), E.GLAS);
+		world.addStroke(rect(58, 62, 8, 8), E.IRON);
+		world.addStroke(rect(76, 62, 8, 8), E.RUBR);
+		world.addStroke(rect(128, 140, 5, 40), E.STON);
+		world.addStroke(rect(138, 168, 11, 12), E.C4);
+		world.addStroke(rect(154, 146, 5, 34), E.STON);
+		for (let x = 4; x < 138; x++) for (let k = 0; k < 2; k++) world.add(x + 0.5, H - 0.5 - k, E.GUNP);
+		for (let k = 0; k < 300; k++) world.add(24 + Math.random() * 50, H - 3 - Math.random() * 8, E.SAWD);
+		for (let k = 0; k < 40; k++) world.add(100 + Math.random() * 8, H - 3 - Math.random() * 5, E.FWRK);
+		for (let y = 150; y < 176; y++) for (let x = 170; x < 185; x++) if ((x + y) % 2 === 0) world.add(x + 0.5, y + 0.5, E.GLOW);
+		world.addStroke(rect(200, 60, 3, 22), E.WALL); world.addStroke(rect(200, 80, 60, 3), E.WALL); world.addStroke(rect(257, 60, 3, 22), E.WALL);
+		for (let y = 66; y < 80; y++) for (let x = 204; x < 232; x++) world.add(x + 0.5, y + 0.5, E.LAVA);
+		world.addStroke(rect(238, 66, 16, 14), E.ICE);
+		world.addStroke(rect(196, 138, 3, 42), E.WALL);
+		for (let y = 150; y < H; y++) for (let x = 199; x < W; x++) world.add(x + 0.5 + (y % 2) * 0.25, y + 0.5, y < 153 ? E.OIL : E.WATR);
+		world.addStroke(rect(220, 144, 22, 3), E.WOOD);
+		world.addStroke(rect(280, 132, 8, 8), E.IRON);
+		world.addStroke(rect(110, 20, 60, 3), E.CLNE);
+		toast('Use Ignite in the Tools tab on the gunpowder at bottom left');
+	}
+	demo();
+
+	// ---- 명령 ----
+	function command(m) {
+		switch (m.name) {
+			case 'state': cur = m.cur; size = m.size; shape = m.shape; break;
+			case 'pause': paused = m.on; break;
+			case 'step': stepOnce = true; break;
+			case 'speed': speed = m.v; break;
+			case 'view': view = m.v; break;
+			case 'gravity': world.gravity = m.v; toast(m.v ? (m.v === 1 ? 'Normal gravity' : 'Low gravity') : 'Zero gravity'); break;
+			case 'undo': if (undo.length) { world.restore(undo.pop()); toast('Undone'); } else toast('Nothing to undo'); break;
+			case 'clear': pushUndo(); world.clear(); toast('Cleared everything'); break;
+			case 'demo': pushUndo(); world.clear(); demo(); break;
+			case 'save': try { post({ t: 'saved', data: world.serialize() }); } catch (e) { toast('Could not save'); } break;
+			case 'load': try { pushUndo(); if (world.deserialize(m.data)) toast('Loaded'); else toast('Could not load'); } catch (e) { toast('Could not load'); } break;
+			case 'resize': canvas.width = m.w; canvas.height = m.h; break;
+			case 'mirror': mirror = m.on; toast(m.on ? 'Mirror drawing on' : 'Mirror drawing off'); break;
+			case 'clearGas': world.clearGas(); toast('Removed smoke and gases'); break;
+			case 'resetAir': world.resetAir(); toast('Reset pressure, wind and air temperature'); break;
+			case 'resetTemp': pushUndo(); world.resetTemp(); toast('Reset all temperatures and put out fires'); break;
+		}
+	}
+	function onMessage(m) {
+		if (m.t === 'down') onDown(m); else if (m.t === 'move') onMove(m); else if (m.t === 'up') onUp();
+		else if (m.t === 'hover') hover = m; else if (m.t === 'cmd') command(m);
+	}
+
+	// ---- 루프 ----
+	let last = 0, frames = 0, fpsT = 0, costAvg = 6, shake = 0, lastFlash = 0, stepAcc = 0;
+	const raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : (f => setTimeout(() => f(performance.now()), 16));
+	function loop(now) {
+		spawnFlow();
+		if (!paused || stepOnce) {
+			stepAcc += stepOnce ? 1 : speed;
+			stepOnce = false;
+			const t0 = performance.now();
+			while (stepAcc >= 1) { world.step(); stepAcc -= 1; }
+			const cost = performance.now() - t0;
+			costAvg = costAvg * 0.95 + cost / Math.max(1, speed) * 0.05;
+			if (costAvg > 24 && world.iters > 4) world.iters = world.iters - 1;
+			else if (costAvg < 11 && world.iters < 8) world.iters = world.iters + 1;
+		}
+		// 큰 폭발은 화면을 흔듦
+		for (const f of world.flash) if (f.t === 1 && f.r > 6) shake = Math.min(6, shake + f.r * 0.12);
+		img32.set(rend.render(now, view));
+		if (pending) {
+			const d = ELEMENTS[E[cur]];
+			const col = (255 << 24) | (((d.rgb[2] * 0.55) | 0) << 16) | (((d.rgb[1] * 0.55) | 0) << 8) | ((d.rgb[0] * 0.55) | 0);
+			for (const k of pending) { const cx = k % W, cy = (k / W) | 0; for (let yy = cy * S; yy < cy * S + S; yy++) for (let xx = cx * S; xx < cx * S + S; xx++) img32[yy * rend.BW + xx] = col; }
+		}
+		octx.putImageData(img, 0, 0);
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
+		ctx.fillStyle = '#08090d'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+		const sx = shake ? (Math.random() - 0.5) * shake * canvas.width / W * 0.5 : 0, sy = shake ? (Math.random() - 0.5) * shake * canvas.height / H * 0.5 : 0;
+		shake *= 0.85; if (shake < 0.1) shake = 0;
+		ctx.imageSmoothingEnabled = false;
+		ctx.drawImage(off, sx, sy, canvas.width, canvas.height);
+		const sc = canvas.width / W;
+		// 고정점, 도형 미리보기, 붓 테두리
+		ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = Math.max(1, sc * 0.3);
+		for (let i = 0; i < world.n; i++) if (world.anch[i] && !ELEMENTS[world.el[i]].fixed) { ctx.beginPath(); ctx.arc(world.x[i] * sc, world.y[i] * sc, sc * 1.1, 0, Math.PI * 2); ctx.stroke(); }
+		if (down && shape && startC && lastC && !TOOLK[cur] && !isSolid(cur)) {
+			ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.setLineDash([sc * 2, sc * 2]);
+			if (shape === 1) { ctx.beginPath(); ctx.moveTo(startC.x * sc, startC.y * sc); ctx.lineTo(lastC.x * sc, lastC.y * sc); ctx.stroke(); }
+			else if (shape === 3) { ctx.beginPath(); ctx.arc(startC.x * sc, startC.y * sc, Math.hypot(lastC.x - startC.x, lastC.y - startC.y) * sc, 0, Math.PI * 2); ctx.stroke(); }
+			else ctx.strokeRect(Math.min(startC.x, lastC.x) * sc, Math.min(startC.y, lastC.y) * sc, Math.abs(lastC.x - startC.x) * sc, Math.abs(lastC.y - startC.y) * sc);
+			ctx.setLineDash([]);
+		}
+		if (mirror) { ctx.strokeStyle = 'rgba(120,200,255,.25)'; ctx.lineWidth = 1; ctx.setLineDash([sc * 3, sc * 3]); ctx.beginPath(); ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height); ctx.stroke(); ctx.setLineDash([]); }
+		const hp = down ? ptr : hover;
+		if (hp && cur !== 'PICK') { ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(hp.x * sc, hp.y * sc, (size + 0.5) * sc, 0, Math.PI * 2); ctx.stroke(); }
+		frames++;
+		if (now - fpsT > 400) {
+			const fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now;
+			let info = '';
+			if (hp) { const pr = world.probe(hp.x, hp.y); info = ` · ${pr.name} ${Math.round(pr.temp)}℃ · pressure ${pr.p.toFixed(1)}`; }
+			post({ t: 'hud', text: `${fps} fps · particles ${world.n}${info}` });
+		}
+		raf(loop);
+	}
+	raf(loop);
+	return onMessage;
+}
+
+</script>
+<script>
+(() => {
+const cv = document.getElementById('cv'), stage = document.getElementById('stage');
+const hud = document.getElementById('hud'), hint = document.getElementById('hint'), toastEl = document.getElementById('toast');
+const W = 320, H = 180;
+
+// ---- 시뮬레이션 연결: 가능하면 별도 스레드(워커), 안 되면 메인 스레드 ----
+let send = () => {}, mode = '';
+function onHostMsg(m) {
+  if (m.t === 'toast') toast(m.msg);
+  else if (m.t === 'hud') hud.textContent = m.text + (mode ? ' · ' + mode : '');
+  else if (m.t === 'picked') { selectKey(m.key); toast(info(m.key).name + ' selected'); }
+  else if (m.t === 'saved') { try { localStorage.setItem('physbox-save', m.data); toast('Saved'); } catch (e) { toast('Not enough storage'); } }
+}
+function startMain() {
+  mode = '';
+  const handler = startHost(cv, onHostMsg);
+  send = m => handler(m);
+  afterStart();
+}
+function startWorker() {
+  let worker;
+  try {
+    const src = document.getElementById('core').textContent + `
+      let handler = null;
+      onmessage = e => { const m = e.data; if (m.t === 'init') handler = startHost(m.canvas, x => postMessage(x)); else if (m.t === 'ping') postMessage({ t: 'pong' }); else if (handler) handler(m); };`;
+    worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+  } catch (e) { startMain(); return; }
+  let ok = false;
+  const timer = setTimeout(() => { if (!ok) { try { worker.terminate(); } catch (e) {} startMain(); } }, 800);
+  worker.onerror = () => { if (!ok) { clearTimeout(timer); try { worker.terminate(); } catch (e) {} startMain(); } };
+  worker.onmessage = e => {
+    if (e.data.t === 'pong' && !ok) {
+      ok = true; clearTimeout(timer);
+      const offc = cv.transferControlToOffscreen();
+      worker.postMessage({ t: 'init', canvas: offc }, [offc]);
+      worker.onmessage = ev => onHostMsg(ev.data);
+      send = m => worker.postMessage(m);
+      mode = 'worker thread';
+      afterStart();
+      return;
+    }
+  };
+  worker.postMessage({ t: 'ping' });
+}
+
+// ---- 화면 크기 ----
+let cssW = 0, cssH = 0;
+function fit() {
+  const r = stage.getBoundingClientRect();
+  const sc = Math.min(r.width / W, r.height / H);
+  cssW = W * sc; cssH = H * sc;
+  cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
+  send({ t: 'cmd', name: 'resize', w: Math.round(cssW * devicePixelRatio), h: Math.round(cssH * devicePixelRatio) });
+}
+function afterStart() { fit(); sendState(); }
+new ResizeObserver(() => fit()).observe(stage);
+
+// ---- 탭·물질 ----
+const TABS = [
+  { id: 'recent', label: 'Recent', items: [] },
+  { id: 'solid', label: 'Solid', items: ['WALL', 'IRON', 'METL', 'GOLD', 'TUNG', 'WOOD', 'COAL', 'GLAS', 'STON', 'BRCK', 'OBSD', 'ICE', 'DMND', 'PLST', 'RUBR', 'WAX', 'COPR', 'SPNG'] },
+  { id: 'powder', label: 'Powder', items: ['SAND', 'DIRT', 'DUST', 'GRVL', 'SAWD', 'ASH', 'SALT', 'SNOW', 'CNCT', 'IRNP', 'RUST', 'NA', 'URAN'] },
+  { id: 'liquid', label: 'Liquid', items: ['WATR', 'SLTW', 'OIL', 'LAVA', 'ACID', 'LN2', 'MERC', 'HONY', 'ETHL', 'SLIM', 'MUD', 'NAPM', 'GLOW', 'GASO'] },
+  { id: 'gas', label: 'Gas/Fire', items: ['FIRE', 'PLSM', 'GAS', 'HYGN', 'OXYG', 'CO2', 'SMKE', 'STEM'] },
+  { id: 'boom', label: 'Explosive', items: ['C4', 'GUNP', 'NITR', 'THRM', 'FUSE', 'FWRK', 'SMKB'] },
+  { id: 'special', label: 'Special', items: ['CLNE', 'VOID', 'PLNT', 'SEED', 'HTPL', 'CLPL'] },
+  { id: 'tool', label: 'Tools', items: ['GRAB', 'IGNT', 'ERAS', 'ANCH', 'HEAT', 'COOL', 'WIND', 'PULL', 'PUSH', 'PICK'] },
+];
+const TOOLS = {
+  IGNT: { name: 'Ignite', rgb: [255, 150, 40], hint: 'Sets things on fire. Explosives go off right away.' },
+  PULL: { name: 'Suck', rgb: [150, 120, 255], hint: 'Sucks air in, pulling powder, liquid and smoke toward your finger.' },
+  PUSH: { name: 'Blow', rgb: [255, 200, 120], hint: 'Blasts air outward, blowing everything away.' },
+  GRAB: { name: 'Grab', rgb: [120, 200, 255], hint: 'Grab, drag and throw solid objects. Stirs powder and liquid.' },
+  ERAS: { name: 'Eraser', rgb: [90, 90, 96], hint: 'Rub to erase. Solid objects re-join from what is left.' },
+  ANCH: { name: 'Pin', rgb: [230, 230, 230], hint: 'Tap an object to pin it in place. Tap again to unpin.' },
+  HEAT: { name: 'Heat', rgb: [255, 90, 40], hint: 'Hold to heat up. Melts, boils and ignites.' },
+  COOL: { name: 'Cool', rgb: [80, 160, 255], hint: 'Hold to cool down. Freezes water and puts out fire.' },
+  WIND: { name: 'Wind', rgb: [170, 240, 200], hint: 'Makes wind in the direction you swipe.' },
+  PICK: { name: 'Picker', rgb: [250, 250, 250], hint: 'Tap something on screen to select that material.' },
+};
+function info(k) { return TOOLS[k] || ELEMENTS[E[k]]; }
+let curTab = 'solid', cur = 'IRON';
+const RECENT = TABS[0].items;
+function useKey(k) { const i = RECENT.indexOf(k); if (i >= 0) RECENT.splice(i, 1); RECENT.unshift(k); if (RECENT.length > 15) RECENT.pop(); }
+const sizes = [1, 2, 3, 5, 8, 12]; let sizeIdx = 2, shape = 0;
+const tabs = document.getElementById('tabs'), elems = document.getElementById('elems');
+TABS.forEach(t => {
+  const b = document.createElement('button'); b.textContent = t.label; b.setAttribute('role', 'tab'); b.dataset.tab = t.id;
+  b.onclick = () => { curTab = t.id; if (t.items.length && !t.items.includes(cur)) cur = t.items[0]; renderUI(); sendState(); };
+  tabs.appendChild(b);
+});
+function renderUI() {
+  tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === curTab));
+  elems.innerHTML = '';
+  const list = TABS.find(t => t.id === curTab).items;
+  if (!list.length) { const p = document.createElement('div'); p.style.cssText = 'grid-column:1/-1;font-size:11px;color:var(--ink-dim);padding:6px 2px'; p.textContent = 'Materials and tools you use show up here.'; elems.appendChild(p); }
+  for (const k of list) {
+    const d = info(k);
+    const b = document.createElement('button'); b.className = 'el';
+    b.innerHTML = `<i style="background:rgb(${d.rgb.join(',')})"></i><span>${d.name}</span>`;
+    b.setAttribute('aria-pressed', cur === k);
+    b.onclick = () => { cur = k; if (curTab !== 'recent') useKey(k); renderUI(); sendState(); };
+    elems.appendChild(b);
+  }
+  hint.textContent = info(cur).hint || '';
+}
+function selectKey(k) { useKey(k); if (curTab !== 'recent') { const t = TABS.find(t => t.id !== 'recent' && t.items.includes(k)); if (t) curTab = t.id; } cur = k; renderUI(); sendState(); }
+function sendState() { send({ t: 'cmd', name: 'state', cur, size: sizes[sizeIdx], shape }); }
+renderUI();
+
+let toastT = 0;
+function toast(m) { toastEl.textContent = m; toastEl.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('on'), 1700); }
+
+// ---- 아래 버튼 ----
+const $ = id => document.getElementById(id);
+function setSize(i) { sizeIdx = Math.max(0, Math.min(sizes.length - 1, i)); $('bSize').textContent = 'Brush ' + sizes[sizeIdx]; sendState(); }
+$('bSize').onclick = () => setSize((sizeIdx + 1) % sizes.length);
+window.brushDelta = d => { setSize(sizeIdx + d); toast('Brush size ' + sizes[sizeIdx]); }; // 안드로이드 볼륨 키 연결용
+addEventListener('keydown', e => {
+  if (e.key === 'AudioVolumeUp' || e.key === 'VolumeUp' || e.key === ']') { window.brushDelta(1); e.preventDefault(); }
+  if (e.key === 'AudioVolumeDown' || e.key === 'VolumeDown' || e.key === '[') { window.brushDelta(-1); e.preventDefault(); }
+  if (e.key === ' ') $('bPause').click();
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') $('bUndo').click();
+});
+const SHAPES = ['Free', 'Line', 'Rect', 'Circle'], SHAPE_MSG = ['Draw freely', 'Drag to draw a line', 'Drag to fill a rectangle', 'Drag from the center to fill a circle'];
+$('bShape').onclick = () => { shape = (shape + 1) % 4; $('bShape').textContent = SHAPES[shape]; $('bShape').classList.toggle('on', shape > 0); sendState(); toast(SHAPE_MSG[shape]); };
+$('bUndo').onclick = () => send({ t: 'cmd', name: 'undo' });
+const VIEWS = ['Normal', 'Air', 'Heat']; let view = 0;
+$('bView').onclick = () => { view = (view + 1) % 3; $('bView').textContent = view ? VIEWS[view] + ' View' : 'View'; $('bView').classList.toggle('on', view > 0); send({ t: 'cmd', name: 'view', v: view }); if (view === 1) toast('Red: high pressure · Blue: low pressure · Green: wind'); if (view === 2) toast('Blue: cold · Red→Yellow→White: hot'); };
+const GRAVS = [1, 0.4, 0]; let gi = 0;
+$('bGrav').onclick = () => { gi = (gi + 1) % 3; $('bGrav').textContent = gi === 0 ? 'Gravity' : gi === 1 ? 'Low Grav' : 'Zero Grav'; $('bGrav').classList.toggle('on', gi > 0); send({ t: 'cmd', name: 'gravity', v: GRAVS[gi] }); };
+const SPEEDS = [1, 2, 0.5]; let si = 0;
+$('bSpeed').onclick = () => { si = (si + 1) % 3; $('bSpeed').textContent = 'Speed ' + SPEEDS[si] + '×'; $('bSpeed').classList.toggle('on', si > 0); send({ t: 'cmd', name: 'speed', v: SPEEDS[si] }); };
+let paused = false;
+$('bPause').onclick = () => { paused = !paused; $('bPause').textContent = paused ? 'Play' : 'Pause'; $('bPause').classList.toggle('on', paused); send({ t: 'cmd', name: 'pause', on: paused }); };
+$('bStep').onclick = () => { if (!paused) $('bPause').click(); send({ t: 'cmd', name: 'step' }); };
+$('bDemo').onclick = () => send({ t: 'cmd', name: 'demo' });
+$('bClear').onclick = () => send({ t: 'cmd', name: 'clear' });
+let mirrorOn = false;
+$('bMirror').onclick = () => { mirrorOn = !mirrorOn; $('bMirror').classList.toggle('on', mirrorOn); send({ t: 'cmd', name: 'mirror', on: mirrorOn }); };
+$('bGasX').onclick = () => send({ t: 'cmd', name: 'clearGas' });
+$('bAirX').onclick = () => send({ t: 'cmd', name: 'resetAir' });
+$('bTempX').onclick = () => send({ t: 'cmd', name: 'resetTemp' });
+$('bSave').onclick = () => send({ t: 'cmd', name: 'save' });
+$('bLoad').onclick = () => { let d = null; try { d = localStorage.getItem('physbox-save'); } catch (e) {} if (d) send({ t: 'cmd', name: 'load', data: d }); else toast('Nothing saved yet'); };
+
+// ---- 터치 ----
+function cellAt(ev) { const r = cv.getBoundingClientRect(); return { x: (ev.clientX - r.left) / r.width * W, y: (ev.clientY - r.top) / r.height * H }; }
+let isDown = false;
+cv.addEventListener('pointerdown', ev => { cv.setPointerCapture(ev.pointerId); isDown = true; const c = cellAt(ev); send({ t: 'down', x: c.x, y: c.y }); });
+cv.addEventListener('pointermove', ev => { const c = cellAt(ev); send({ t: isDown ? 'move' : 'hover', x: c.x, y: c.y }); });
+const up = () => { if (!isDown) return; isDown = false; send({ t: 'up' }); };
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+
+// 모든 UI 준비가 끝난 뒤 시뮬레이션 시작
+if (typeof OffscreenCanvas !== 'undefined' && cv.transferControlToOffscreen) startWorker(); else startMain();
+})();
+</script>
+</body>
+</html>
